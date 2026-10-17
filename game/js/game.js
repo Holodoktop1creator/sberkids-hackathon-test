@@ -19,7 +19,9 @@
     duelScore: [0, 0],
     duelMarks: [],
     phase: 'menu',   // play | pass | intro | reveal | sheet | end
-    hinted: false,
+    hinted: false,   // ребёнок уже хоть раз потянул силуэт
+    touched: false,  // трогал ли в этом ходу
+    idleT: 0,
     runs: 0,
     record: 0,
     acc: [],
@@ -87,6 +89,8 @@
   // ---------- Секундомер раунда ----------
   // Считает вверх и ничем не грозит: без обратного отсчёта и без штрафа за время.
   var SW = { acc: 0, t0: 0, on: false, raf: 0, sec: -1, el: null, txt: null };
+  // Секундомер включается в content/game.json ("stopwatch": true)
+  function swOn() { return !!(S.content && S.content.cfg.stopwatch); }
   function fmtSec(ms) { return (Math.floor(ms / 100) / 10).toFixed(1).replace('.', ','); }
   function swDraw(ms) {
     var s = fmtSec(ms);
@@ -206,14 +210,25 @@
     } else {
       B.setTurn(0, [true, false]);
     }
-    $('hint').classList.toggle('go', !S.hinted);
+    // показываем, как тянуть: сразу, пока ребёнок ни разу не тянул,
+    // и повторно, если в ходе ничего не трогали 5 секунд
+    S.touched = false;
+    clearTimeout(S.idleT);
+    if (!S.hinted) B.demo(true);
+    else {
+      var ep = S.epoch;
+      S.idleT = setTimeout(function () {
+        if (ep === S.epoch && S.phase === 'play' && !S.touched) B.demo(true);
+      }, 5000);
+    }
     swReset();
     swStart();
   }
 
   function onBoardChange(g) {
     App.sound.play('tick', U.clamp((Math.log(g) + 2) / 4, 0, 1));
-    if (!S.hinted) { S.hinted = true; $('hint').classList.remove('go'); }
+    S.hinted = true;
+    S.touched = true;
   }
 
   // ---------- Кнопки ----------
@@ -237,6 +252,8 @@
     if (S.phase !== 'play') return;
     App.sound.play('lock');
     S.turnTimes[S.turn - 1] = swStop();
+    clearTimeout(S.idleT);
+    B.demo(false);
     if (S.duel && S.turn === 1) {
       B.enable(false);
       B.setTurn(0, [false, false]);
@@ -332,9 +349,9 @@
       score: '+' + gained + (r.boss ? ' ×2' : ''),
       band: band(pts),
       rank: rankText(pts),
-      time: '⏱ ' + fmtSec(time) + ' с' + (pts >= 85 && time < 4000 ? ' · ⚡ Молния!' : ''),
+      time: swOn() ? '⏱ ' + fmtSec(time) + ' с' + (pts >= 85 && time < 4000 ? ' · ⚡ Молния!' : '') : '',
       ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>У тебя: ' + esc(lines.guess) + '<br>' + esc(lines.miss),
-      fact: r.target.fact || r.ref.fact,
+      factOf: r.target.fact ? r.target : r.ref,
       tip: tipFor(r, pts)
     });
     celebrate(pts);
@@ -354,10 +371,10 @@
       score: p1 + ' : ' + p2,
       band: 3,
       rank: w === 0 ? 'Ничья! 🤝' : 'Игрок ' + w + ' ближе! 🏆',
-      time: '⏱ ' + fmtSec(S.turnTimes[0] || 0) + ' с : ' + fmtSec(S.turnTimes[1] || 0) + ' с',
+      time: swOn() ? '⏱ ' + fmtSec(S.turnTimes[0] || 0) + ' с : ' + fmtSec(S.turnTimes[1] || 0) + ' с' : '',
       ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>Игрок 1: ' + esc(B.fmtVal(r.target, B.value(r.target, g1))) +
         ' · Игрок 2: ' + esc(B.fmtVal(r.target, B.value(r.target, g2))),
-      fact: r.target.fact || r.ref.fact,
+      factOf: r.target.fact ? r.target : r.ref,
       tip: tipFor(r, Math.max(p1, p2))
     });
     celebrate(Math.max(p1, p2));
@@ -392,7 +409,8 @@
     $('res-rank').textContent = o.rank;
     $('res-time').textContent = o.time;
     $('res-ratio').innerHTML = o.ratio;
-    $('res-fact').textContent = o.fact;
+    $('fact-name').textContent = o.factOf.name;
+    $('res-fact').textContent = o.factOf.fact;
     $('res-tip').textContent = o.tip;
     $('btn-next').textContent = S.idx + 1 < S.rounds.length ? 'Дальше →' : 'Итоги 🏁';
     // сначала даём рассмотреть доску с ответом
@@ -449,8 +467,8 @@
     $('end-best').innerHTML = '<h3>Лучшие моменты</h3><ul>' +
       (best ? '<li>🎯 ' + esc(best.round.target.name) + ' vs ' + esc(best.round.ref.name) + ' — ' + best.pts + ' ' + U.plural(best.pts, ['очко', 'очка', 'очков']) + '</li>' : '') +
       (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') +
-      '<li>⏱ Всё время: ' + fmtSec(totalTime) + ' с</li>' +
-      (fast ? '<li>⚡ Самый быстрый точный раунд: ' + esc(fast.round.target.name) + ' — ' + fmtSec(fast.time) + ' с</li>' : '') + '</ul>';
+      (swOn() ? '<li>⏱ Всё время: ' + fmtSec(totalTime) + ' с</li>' : '') +
+      (swOn() && fast ? '<li>⚡ Самый быстрый точный раунд: ' + esc(fast.round.target.name) + ' — ' + fmtSec(fast.time) + ' с</li>' : '') + '</ul>';
 
     $('end-unlocks').innerHTML = '<h3>Гардероб Капи</h3><ul>' + unlocks.map(function (u) {
       var open = S.acc.indexOf(u.id) >= 0;
@@ -530,10 +548,10 @@
   $('btn-share').addEventListener('click', function () {
     var r = S.last;
     if (!r) return;
-    var time = fmtSec(r.time);
-    doShare('Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + ' за ' + time + ' с — «' + r.title.name + '» ' + r.grid +
+    var time = swOn() ? fmtSec(r.time) + ' с' : '';
+    doShare('Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + (time ? ' за ' + time : '') + ' — «' + r.title.name + '» ' + r.grid +
       '\nСможешь прикинуть точнее? 😏', {
-      kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name + ' · ⏱ ' + time + ' с',
+      kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name + (time ? ' · ⏱ ' + time : ''),
       grid: r.grid, capy: { acc: S.acc, mood: 'happy' }, footer: 'Сможешь прикинуть точнее? 😏'
     });
   });
@@ -577,6 +595,8 @@
     S.epoch++;          // отменяем отложенные шаги текущего раунда
     S.phase = 'menu';
     swStop();
+    clearTimeout(S.idleT);
+    B.demo(false);
     B.enable(false);
     ['intro', 'pass', 'sheet', 'share-view'].forEach(function (id) { $(id).hidden = true; });
     var rec = $('record');
@@ -647,6 +667,7 @@
       document.querySelector('[data-mode="chaos"]').disabled = !(a || k);
       $('btn-duel').disabled = !(a || k);
       $('load-error').hidden = a || k;
+      SW.el.hidden = !c.cfg.stopwatch;
     });
   }
   $('btn-reload').addEventListener('click', loadContent);
@@ -664,6 +685,7 @@
     SW.el.innerHTML = '<span class="sw-ico">⏱</span><b>0,0</b><small>с</small>';
     $('board').appendChild(SW.el);
     SW.txt = SW.el.querySelector('b');
+    SW.el.hidden = true;
     syncSound();
     loadContent();
   }

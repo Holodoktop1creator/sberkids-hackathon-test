@@ -19,6 +19,9 @@
   var wob = { x: 0, v: 0 };
   var drag = null;
   var onChange = null;
+  // Демо свайпа: палец ездит вверх-вниз, белый силуэт синхронно растёт и сжимается
+  var demo = { on: false, t0: 0, k: 1, el: null, hand: null };
+  var DEMO_PERIOD = 1.8;   // секунд на одно движение вверх-вниз
 
   function init(container, cb) {
     el = container;
@@ -34,7 +37,8 @@
       '</svg>' +
       '<div class="chip-ref"></div>' +
       '<div class="vchip v1"></div><div class="vchip v2"></div><div class="vchip vt"></div>' +
-      '<div class="ruler"><i></i><span></span></div>';
+      '<div class="ruler"><i></i><span></span></div>' +
+      '<div class="swipe-demo" aria-hidden="true"><i>▲</i><span class="sd-hand">👆</span><i>▼</i></div>';
     svg = el.querySelector('.bsvg');
     ['ref', 'g1', 'g2', 'truth'].forEach(function (k) {
       var g = svg.querySelector(k === 'ref' ? '.ref' : k === 'truth' ? '.truth' : '.' + k);
@@ -47,9 +51,12 @@
     chips.vt = el.querySelector('.vt');
     ruler = el.querySelector('.ruler i');
     rulerTxt = el.querySelector('.ruler span');
+    demo.el = el.querySelector('.swipe-demo');
+    demo.hand = el.querySelector('.sd-hand');
 
     el.addEventListener('pointerdown', function (e) {
       if (!st.drag) return;
+      setDemo(false);
       drag = { y: e.clientY, g: st.g[st.active], id: e.pointerId, last: e.clientY };
       try { el.setPointerCapture(e.pointerId); } catch (_) { /* не критично */ }
     });
@@ -126,10 +133,15 @@
       'translate(' + b.x.toFixed(2) + ' ' + b.y.toFixed(2) + ') scale(' + k.toPrecision(5) + ') translate(' + (-item.vb[0]) + ' ' + (-item.vb[1]) + ')');
   }
 
+  // размер с учётом демо-покачивания
+  function gOf(p) { return st.g[p] * (demo.on && p === st.active ? demo.k : 1); }
+
   function displayG() {
     var dg = 0;
-    if (st.show[0]) dg = Math.max(dg, st.g[0]);
-    if (st.show[1]) dg = Math.max(dg, st.g[1]);
+    // во время демо камера берёт запас на максимум покачивания и стоит на месте
+    var top = demo.on ? Math.exp(0.35) : 1;
+    if (st.show[0]) dg = Math.max(dg, st.g[0] * (st.active === 0 ? top : 1));
+    if (st.show[1]) dg = Math.max(dg, st.g[1] * (st.active === 1 ? top : 1));
     if (st.truth) dg = Math.max(dg, 1);
     return Math.max(dg, 0.2);
   }
@@ -157,8 +169,8 @@
     var s = o.s;
     place(L.ref, R.ref, box(R.ref, o.ref, 1, s));
 
-    var b1 = box(R.target, o.anchor, st.g[0], s);
-    var b2 = box(R.target, o.anchor, st.g[1], s);
+    var b1 = box(R.target, o.anchor, gOf(0), s);
+    var b2 = box(R.target, o.anchor, gOf(1), s);
     var bt = box(R.target, o.anchor, 1, s);
     place(L.g1, R.target, b1);
     place(L.g2, R.target, b2);
@@ -182,8 +194,8 @@
     o.grounds.forEach(function (y) { grounds += '<line x1="0" x2="' + W + '" y1="' + y + '" y2="' + y + '"/>'; });
     if (L.grounds._html !== grounds) { L.grounds.innerHTML = grounds; L.grounds._html = grounds; }
 
-    chip(chips.v1, b1, fmtVal(R.target, value(R.target, st.g[0])), st.show[0], st.truth ? 'center' : 'center');
-    chip(chips.v2, b2, fmtVal(R.target, value(R.target, st.g[1])), st.show[1], 'center');
+    chip(chips.v1, b1, fmtVal(R.target, value(R.target, gOf(0))), st.show[0], 'center');
+    chip(chips.v2, b2, fmtVal(R.target, value(R.target, gOf(1))), st.show[1], 'center');
     chip(chips.vt, bt, '✓ ' + fmtVal(R.target, R.target.value), st.truth, 'right');
 
     // линейка в мировых единицах
@@ -193,6 +205,11 @@
   }
 
   function loop() {
+    if (demo.on) {
+      var sn = Math.sin((performance.now() - demo.t0) / 1000 * Math.PI * 2 / DEMO_PERIOD);
+      demo.k = Math.exp(0.35 * sn);
+      demo.hand.style.transform = 'translateY(' + (-sn * 44).toFixed(1) + 'px)';
+    }
     var target = goal();
     cam.s += (target - cam.s) * 0.22;
     wob.v += -wob.x * 0.22;
@@ -200,7 +217,7 @@
     wob.x += wob.v;
     render();
     var settled = Math.abs(target - cam.s) / target < 0.002 && Math.abs(wob.x) < 0.002 && Math.abs(wob.v) < 0.002;
-    if (settled && !drag) { cam.s = target; wob.x = wob.v = 0; render(); cam.raf = 0; return; }
+    if (settled && !drag && !demo.on) { cam.s = target; wob.x = wob.v = 0; render(); cam.raf = 0; return; }
     cam.raf = requestAnimationFrame(loop);
   }
   function kick() { if (!cam.raf) cam.raf = requestAnimationFrame(loop); }
@@ -213,7 +230,18 @@
     kick();
   }
 
+  function setDemo(on) {
+    if (demo.on === on || !el) return;
+    if (!on && R) st.g[st.active] = gOf(st.active); // оставляем тот размер, который ребёнок видит
+    demo.on = on;
+    demo.k = 1;
+    el.classList.toggle('demo', on);
+    if (on) demo.t0 = performance.now();
+    kick();
+  }
+
   function setRound(round, opts) {
+    setDemo(false);
     R = round;
     measure();
     st.g = [opts.start, opts.start];
@@ -238,6 +266,7 @@
 
   // Дуэль: какой игрок сейчас тянет и чьи силуэты видны
   function setTurn(p, visible) {
+    setDemo(false);
     st.active = p;
     st.show = visible.slice();
     L.g1.wrap.classList.toggle('active', p === 0);
@@ -246,6 +275,7 @@
   }
 
   function reveal() {
+    setDemo(false);
     st.drag = false;
     st.truth = true;
     L.truth.wrap.classList.remove('slam');
@@ -268,7 +298,8 @@
     truthPoint: truthPoint,
     enable: function (on) { st.drag = on; },
     getG: function (p) { return st.g[p]; },
-    nudge: function (p, f) { setG(p, st.g[p] * f); wob.v += f > 1 ? 0.04 : -0.04; },
+    demo: setDemo,
+    nudge: function (p, f) { setDemo(false); setG(p, st.g[p] * f); wob.v += f > 1 ? 0.04 : -0.04; },
     value: value,
     fmtVal: fmtVal
   };
