@@ -661,7 +661,8 @@
   function syncSound() {
     var on = App.sound.isOn();
     Array.prototype.forEach.call(document.querySelectorAll('.js-sound'), function (b) {
-      b.textContent = b.classList.contains('icon-btn') ? (on ? '🔊' : '🔇') : (on ? '🔊 Звук' : '🔇 Без звука');
+      b.textContent = b.classList.contains('icon-btn') ? (on ? '🔊' : '🔇') : (on ? '🔊 Звук и вибрация' : '🔇 Тихий режим');
+      b.setAttribute('aria-label', on ? 'Выключить звук и вибрацию' : 'Включить звук и вибрацию');
     });
   }
   Array.prototype.forEach.call(document.querySelectorAll('.js-sound'), function (b) {

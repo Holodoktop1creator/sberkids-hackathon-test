@@ -76,9 +76,11 @@
   App.sound = {
     play: function (name, arg) { try { if (sfx[name]) sfx[name](arg); } catch (e) { /* звук не критичен */ } },
     isOn: function () { return on; },
+    // Тихий режим глушит всё: звуки, а через bridge — и вибрацию
     toggle: function () {
       on = !on;
       App.util.store('prikin.sound', on ? '1' : '0');
+      if (!on && ctx && ctx.state === 'running') ctx.suspend();
       if (on) sfx.tap();
       return on;
     }

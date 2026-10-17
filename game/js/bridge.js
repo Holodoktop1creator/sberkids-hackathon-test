@@ -31,7 +31,11 @@
       completedSent = true;
       send('COMPLETED_EVENT');
     },
-    vibrate: function () { send('VIBRATION_EVENT'); },
+    // Тактильный «клик» тоже слышно, поэтому в тихом режиме не вибрируем
+    vibrate: function () {
+      if (App.sound && !App.sound.isOn()) return;
+      send('VIBRATION_EVENT');
+    },
     share: function (text, image) {
       var extra = { text: text };
       if (image) extra.image = image;
