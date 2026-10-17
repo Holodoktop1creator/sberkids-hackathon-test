@@ -23,7 +23,9 @@
     runs: 0,
     record: 0,
     acc: [],
-    last: null
+    last: null,
+    epoch: 0,        // меняется при новом раунде и выходе в меню — отменяет отложенные шаги
+    turnTimes: []
   };
   var MERCATOR = ['greenland', 'canada', 'antarctica', 'africa'];
   var capyEnd = $('capy-end');
@@ -82,6 +84,43 @@
     ['btn-go', 'btn-minus', 'btn-plus'].forEach(function (id) { $(id).disabled = !on; });
   }
 
+  // ---------- Секундомер раунда ----------
+  // Считает вверх и ничем не грозит: без обратного отсчёта и без штрафа за время.
+  var SW = { acc: 0, t0: 0, on: false, raf: 0, sec: -1, el: null, txt: null };
+  function fmtSec(ms) { return (Math.floor(ms / 100) / 10).toFixed(1).replace('.', ','); }
+  function swDraw(ms) {
+    var s = fmtSec(ms);
+    if (SW.txt.textContent !== s) SW.txt.textContent = s;
+    var sec = Math.floor(ms / 1000);
+    if (sec !== SW.sec) {
+      SW.sec = sec;
+      if (SW.on && sec > 0) restart(SW.el, 'tick');
+      SW.el.classList.toggle('long', sec >= 15);
+    }
+  }
+  function swLoop() {
+    if (!SW.on) return;
+    swDraw(SW.acc + performance.now() - SW.t0);
+    SW.raf = requestAnimationFrame(swLoop);
+  }
+  function swStop() {
+    if (SW.on) {
+      SW.acc += performance.now() - SW.t0;
+      SW.on = false;
+      cancelAnimationFrame(SW.raf);
+    }
+    if (SW.el) { SW.el.classList.remove('run'); swDraw(SW.acc); }
+    return SW.acc;
+  }
+  function swReset() { swStop(); SW.acc = 0; SW.sec = -1; swDraw(0); }
+  function swStart() {
+    if (SW.on) return;
+    SW.on = true;
+    SW.t0 = performance.now();
+    SW.el.classList.add('run');
+    swLoop();
+  }
+
   // ---------- Раунд ----------
   function askText(r) {
     if (r.kind === 'countries') return 'какая площадь?';
@@ -100,7 +139,10 @@
   function playRound(i) {
     S.idx = i;
     var r = S.rounds[i];
+    var ep = ++S.epoch;
     S.phase = 'intro';
+    S.turnTimes = [];
+    swReset();
     setControls(false);
     $('sheet').hidden = true;
     var k = $('kicker');
@@ -115,6 +157,7 @@
     B.enable(false);
     updateHud();
     showIntro(r).then(function () {
+      if (ep !== S.epoch) return;
       if (S.duel) askPass(1);
       else beginTurn();
     });
@@ -164,6 +207,8 @@
       B.setTurn(0, [true, false]);
     }
     $('hint').classList.toggle('go', !S.hinted);
+    swReset();
+    swStart();
   }
 
   function onBoardChange(g) {
@@ -191,6 +236,7 @@
   $('btn-go').addEventListener('click', function () {
     if (S.phase !== 'play') return;
     App.sound.play('lock');
+    S.turnTimes[S.turn - 1] = swStop();
     if (S.duel && S.turn === 1) {
       B.enable(false);
       B.setTurn(0, [false, false]);
@@ -226,7 +272,9 @@
     B.reveal();
     App.sound.play('slam');
     restart($('board'), 'shake');
+    var ep = S.epoch;
     U.wait(450).then(function () {
+      if (ep !== S.epoch) return;
       if (S.duel) duelResult(); else soloResult();
     });
   }
@@ -262,7 +310,8 @@
     var pts = points(g);
     var gained = pts * (r.boss ? 2 : 1);
     S.score += gained;
-    S.results[S.idx] = { pts: pts, gained: gained, round: r };
+    var time = S.turnTimes[0] || 0;
+    S.results[S.idx] = { pts: pts, gained: gained, round: r, time: time };
     S.combo = pts >= 65 ? S.combo + 1 : 0;
     S.bestCombo = Math.max(S.bestCombo, S.combo);
 
@@ -283,6 +332,7 @@
       score: '+' + gained + (r.boss ? ' ×2' : ''),
       band: band(pts),
       rank: rankText(pts),
+      time: '⏱ ' + fmtSec(time) + ' с' + (pts >= 85 && time < 4000 ? ' · ⚡ Молния!' : ''),
       ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>У тебя: ' + esc(lines.guess) + '<br>' + esc(lines.miss),
       fact: r.target.fact || r.ref.fact,
       tip: tipFor(r, pts)
@@ -304,6 +354,7 @@
       score: p1 + ' : ' + p2,
       band: 3,
       rank: w === 0 ? 'Ничья! 🤝' : 'Игрок ' + w + ' ближе! 🏆',
+      time: '⏱ ' + fmtSec(S.turnTimes[0] || 0) + ' с : ' + fmtSec(S.turnTimes[1] || 0) + ' с',
       ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>Игрок 1: ' + esc(B.fmtVal(r.target, B.value(r.target, g1))) +
         ' · Игрок 2: ' + esc(B.fmtVal(r.target, B.value(r.target, g2))),
       fact: r.target.fact || r.ref.fact,
@@ -339,12 +390,15 @@
     sc.textContent = o.score;
     sc.className = 'res-score s' + o.band + (S.duel ? ' duel' : '');
     $('res-rank').textContent = o.rank;
+    $('res-time').textContent = o.time;
     $('res-ratio').innerHTML = o.ratio;
     $('res-fact').textContent = o.fact;
     $('res-tip').textContent = o.tip;
     $('btn-next').textContent = S.idx + 1 < S.rounds.length ? 'Дальше →' : 'Итоги 🏁';
     // сначала даём рассмотреть доску с ответом
+    var ep = S.epoch;
     U.wait(650).then(function () {
+      if (ep !== S.epoch) return;
       $('sheet').hidden = false;
       var inner = document.querySelector('.sheet-inner');
       inner.scrollTop = 0;
@@ -389,14 +443,20 @@
     $('end-grid').textContent = grid;
 
     var best = S.results.reduce(function (a, b) { return !a || b.pts > a.pts ? b : a; }, null);
+    var totalTime = S.results.reduce(function (a, b) { return a + (b.time || 0); }, 0);
+    var fast = S.results.filter(function (x) { return x.pts >= 65; })
+      .reduce(function (a, b) { return !a || b.time < a.time ? b : a; }, null);
     $('end-best').innerHTML = '<h3>Лучшие моменты</h3><ul>' +
-      (best ? '<li>🎯 ' + esc(best.round.target.name) + ' vs ' + esc(best.round.ref.name) + ' — ' + best.pts + ' очков</li>' : '') +
-      (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') + '</ul>';
+      (best ? '<li>🎯 ' + esc(best.round.target.name) + ' vs ' + esc(best.round.ref.name) + ' — ' + best.pts + ' ' + U.plural(best.pts, ['очко', 'очка', 'очков']) + '</li>' : '') +
+      (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') +
+      '<li>⏱ Всё время: ' + fmtSec(totalTime) + ' с</li>' +
+      (fast ? '<li>⚡ Самый быстрый точный раунд: ' + esc(fast.round.target.name) + ' — ' + fmtSec(fast.time) + ' с</li>' : '') + '</ul>';
 
     $('end-unlocks').innerHTML = '<h3>Гардероб Капи</h3><ul>' + unlocks.map(function (u) {
       var open = S.acc.indexOf(u.id) >= 0;
+      var need = Math.round(u.score * max / 1000);
       return '<li class="' + (open ? 'new' : 'locked') + '">' + (open ? '✅ ' : '🔒 ') + esc(u.label) +
-        (open ? '' : ' — нужно ' + Math.round(u.score * max / 1000) + ' очков') + '</li>';
+        (open ? '' : ' — нужно ' + need + ' ' + U.plural(need, ['очко', 'очка', 'очков'])) + '</li>';
     }).join('') + '</ul>';
 
     var kinds = {};
@@ -414,7 +474,7 @@
     App.sound.play('win');
     App.bridge.finish();
     App.bridge.completed();
-    S.last = { score: S.score, max: max, title: title, grid: grid };
+    S.last = { score: S.score, max: max, title: title, grid: grid, time: totalTime };
   }
 
   function endDuel() {
@@ -442,29 +502,49 @@
     toast._t = setTimeout(function () { t.hidden = true; }, 1800);
   }
 
+  // Приложение получает SHARING_EVENT и открывает системное «Поделиться».
+  // Карточку показываем и в самой игре — так кнопка всегда даёт видимый результат.
+  var sharing = false;
+  function doShare(text, card) {
+    if (sharing) return;
+    sharing = true;
+    App.sound.play('tap');
+    toast('Готовлю карточку…');
+    App.share.card(card).then(function (img) {
+      sharing = false;
+      App.bridge.share(text, img);
+      $('toast').hidden = true;
+      var im = $('share-img');
+      im.hidden = !img;
+      if (img) im.src = img;
+      $('share-note').textContent = 'Открываем «Поделиться» 📲 Если меню не появилось, зажми картинку — её можно сохранить и отправить другу.';
+      $('share-view').hidden = false;
+      App.sound.play('win');
+    });
+  }
+  $('btn-share-ok').addEventListener('click', function () {
+    App.sound.play('tap');
+    $('share-view').hidden = true;
+  });
+
   $('btn-share').addEventListener('click', function () {
     var r = S.last;
     if (!r) return;
-    App.sound.play('tap');
-    var text = 'Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + ' — «' + r.title.name + '» ' + r.grid +
-      '\nСможешь прикинуть точнее? 😏';
-    toast('Готовлю карточку…');
-    App.share.card({
-      kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name,
+    var time = fmtSec(r.time);
+    doShare('Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + ' за ' + time + ' с — «' + r.title.name + '» ' + r.grid +
+      '\nСможешь прикинуть точнее? 😏', {
+      kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name + ' · ⏱ ' + time + ' с',
       grid: r.grid, capy: { acc: S.acc, mood: 'happy' }, footer: 'Сможешь прикинуть точнее? 😏'
-    }).then(function (img) { App.bridge.share(text, img); });
+    });
   });
 
   $('btn-duel-share').addEventListener('click', function () {
-    App.sound.play('tap');
     var a = S.duelScore[0], b = S.duelScore[1];
     var grid = $('duel-grid').textContent;
-    var text = 'Дуэль в «Прикинь!»: ' + a + ' : ' + b + ' ' + grid + '\nКто прикинет точнее? ⚔️';
-    toast('Готовлю карточку…');
-    App.share.card({
+    doShare('Дуэль в «Прикинь!»: ' + a + ' : ' + b + ' ' + grid + '\nКто прикинет точнее? ⚔️', {
       kicker: 'Дуэль на одном телефоне', big: a + ' : ' + b, title: $('duel-title').textContent,
       grid: grid, capy: { acc: S.acc, mood: 'happy' }, footer: 'Кто прикинет точнее? ⚔️'
-    }).then(function (img) { App.bridge.share(text, img); });
+    });
   });
 
   // ---------- Старт ----------
@@ -494,7 +574,11 @@
   }
   function toMenu() {
     App.sound.play('tap');
+    S.epoch++;          // отменяем отложенные шаги текущего раунда
     S.phase = 'menu';
+    swStop();
+    B.enable(false);
+    ['intro', 'pass', 'sheet', 'share-view'].forEach(function (id) { $(id).hidden = true; });
     var rec = $('record');
     rec.hidden = !S.record;
     rec.textContent = 'Рекорд этой сессии: ' + S.record;
@@ -511,8 +595,16 @@
   $('btn-rematch').addEventListener('click', startDuel);
   $('btn-menu').addEventListener('click', toMenu);
   $('btn-duel-menu').addEventListener('click', toMenu);
-  Array.prototype.forEach.call(document.querySelectorAll('.js-exit'), function (b) {
-    b.addEventListener('click', function () { App.bridge.close(); });
+  // ✕ в левом верхнем углу — всегда. В приложении CLOSE_EVENT закрывает экран игры;
+  // если игра открыта не в приложении и экран остался, возвращаемся в меню.
+  $('btn-close').addEventListener('click', function () {
+    App.sound.play('tap');
+    App.bridge.close();
+    setTimeout(function () {
+      if (document.visibilityState === 'hidden') return;
+      if (S.phase === 'menu') { toast('В СберKids этот крестик закрывает игру'); return; }
+      toMenu();
+    }, 450);
   });
 
   function syncSound() {
@@ -567,6 +659,11 @@
     App.capy.mount($('capy-start'), 'idle');
     App.capy.wear($('capy-start'), ['orange']);
     B.init($('board'), onBoardChange);
+    SW.el = document.createElement('div');
+    SW.el.className = 'stopwatch';
+    SW.el.innerHTML = '<span class="sw-ico">⏱</span><b>0,0</b><small>с</small>';
+    $('board').appendChild(SW.el);
+    SW.txt = SW.el.querySelector('b');
     syncSound();
     loadContent();
   }

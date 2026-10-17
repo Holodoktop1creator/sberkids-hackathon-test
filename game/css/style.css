@@ -201,7 +201,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .chip-ref {
   position: absolute; left: 10px; top: 10px; right: 10px; text-align: left; pointer-events: none;
   font-size: 13px; font-weight: 800; color: #fff; background: var(--ink); border-radius: 10px; padding: 5px 9px;
-  width: max-content; max-width: calc(100% - 20px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  width: max-content; max-width: calc(100% - 112px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .vchip {
   position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap;
@@ -282,6 +282,39 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .panel li.locked { opacity: .45; }
 .panel li.new { color: var(--lime); }
 .end-btns { display: flex; flex-direction: column; gap: 12px; margin: 6px 0 16px; }
+
+/* ---------- Крестик «закрыть игру» — всегда слева сверху ---------- */
+.close-x {
+  position: fixed; z-index: 90; left: calc(env(safe-area-inset-left, 0px) + 10px); top: calc(var(--safe-top) + 6px);
+  width: 40px; height: 40px; border-radius: 50%; border: 3px solid var(--ink);
+  background: #fff; color: var(--ink); font-size: 20px; font-weight: 900; line-height: 1; padding: 0;
+  box-shadow: 0 3px 0 var(--ink); touch-action: manipulation;
+}
+.close-x:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+
+/* ---------- Секундомер ---------- */
+.stopwatch {
+  position: absolute; right: 10px; top: 8px; z-index: 2; pointer-events: none;
+  display: flex; align-items: baseline; gap: 3px;
+  background: var(--ink); color: #fff; border-radius: 12px; padding: 4px 9px 4px 7px;
+  font-weight: 900; font-variant-numeric: tabular-nums; border: 2px solid var(--ink);
+}
+.stopwatch b { font-size: 20px; min-width: 2.6ch; text-align: right; }
+.stopwatch small { font-size: 12px; opacity: .7; }
+.stopwatch .sw-ico { font-size: 16px; display: inline-block; }
+.stopwatch.run { background: var(--hot); }
+.stopwatch.run .sw-ico { animation: swSpin 1s steps(8) infinite; }
+.stopwatch.long.run { background: var(--violet); }
+.stopwatch.tick { animation: swTick .3s cubic-bezier(.2, 1.8, .4, 1); }
+@keyframes swSpin { to { transform: rotate(360deg); } }
+@keyframes swTick { 40% { transform: scale(1.18) rotate(-4deg); } }
+.res-time { flex-basis: 100%; text-align: center; font-size: 15px; font-weight: 900; color: var(--violet-dark); }
+
+/* ---------- Карточка «поделиться» ---------- */
+.share-card { text-align: center; width: 100%; max-width: 340px; animation: pop .35s cubic-bezier(.2, 1.4, .4, 1); }
+.share-title { font-size: 24px; font-weight: 900; margin-bottom: 10px; }
+.share-card img { display: block; width: 100%; max-height: 52vh; object-fit: contain; border-radius: 18px; border: 3px solid #fff; -webkit-touch-callout: default; }
+.share-note { color: var(--muted); font-size: 14px; font-weight: 700; line-height: 1.35; margin: 12px 0 16px; }
 
 /* ---------- Оверлей и тост ---------- */
 .overlay { position: fixed; inset: 0; z-index: 50; background: rgba(12, 8, 30, .95); display: grid; place-items: center; padding: 24px; }

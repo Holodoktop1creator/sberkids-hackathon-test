@@ -74,8 +74,12 @@
     }
 
     var svg = App.capy.svgFor(o.capy.acc, o.capy.mood);
-    return loadImg('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg))
-      .then(finish, function () { return finish(null); });
+    // Если какой-то WebView не прорисует SVG, не ждём вечно: карточка соберётся без Капи
+    var timeout = new Promise(function (res) { setTimeout(function () { res(null); }, 1500); });
+    var img = loadImg('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)).catch(function () { return null; });
+    return Promise.race([img, timeout]).then(function (im) {
+      try { return finish(im); } catch (e) { return null; }
+    });
   }
 
   App.share = { card: card };
