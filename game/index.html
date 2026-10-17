@@ -3,20 +3,162 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-  <title>Тестовая игра</title>
-  <link rel="stylesheet" href="style.css">
+  <meta name="theme-color" content="#140f2b">
+  <title>Прикинь!</title>
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <main id="app">
-    <h1>Привет! 👋</h1>
-    <p id="status">Нажми кнопку, чтобы начать.</p>
-    <button id="play">Играть</button>
-    <div class="row">
-      <button id="vibrate">Вибрация</button>
-      <button id="share">Поделиться</button>
-      <button id="close">Выйти</button>
+  <div id="bg" aria-hidden="true"><i class="blob b1"></i><i class="blob b2"></i><i class="blob b3"></i></div>
+
+  <!-- Старт -->
+  <section class="screen" id="scr-start">
+    <div class="start-top">
+      <h1 class="logo" aria-label="Прикинь!"></h1>
+      <p class="tagline">Растяни башню до нужного размера:<br>цены, копилка, кредиты и ловушки мошенников</p>
     </div>
-  </main>
-  <script src="game.js"></script>
+    <div class="start-hero">
+      <div class="float f1">🪙</div><div class="float f2">💸</div><div class="float f3">🪙</div><div class="float f4">⭐</div>
+      <div class="capy capy-hero" id="capy-start"></div>
+      <div class="hero-bubble" id="hero-bubble">Привет! Я Капи. Прикинем?</div>
+    </div>
+    <div class="howto">
+      <span><b>↕</b>Тяни башню</span>
+      <span><b>✅</b>Жми «Готово»</span>
+      <span><b>⭐</b>Собирай звёзды</span>
+    </div>
+    <div class="start-btns">
+      <button class="btn btn-big" id="btn-solo">▶ Играть</button>
+      <button class="btn btn-violet" id="btn-duel">👥 Дуэль на одном телефоне</button>
+      <div class="row">
+        <button class="btn btn-ghost btn-sm js-sound">🔊 Звук</button>
+        <button class="btn btn-ghost btn-sm js-exit">Выйти</button>
+      </div>
+      <p class="record" id="record" hidden></p>
+    </div>
+  </section>
+
+  <!-- Игра -->
+  <section class="screen" id="scr-game" hidden>
+    <header class="hud">
+      <div class="dots" id="dots"></div>
+      <div class="hud-score" id="hud-score">⭐ 0</div>
+    </header>
+
+    <div class="qcard" id="qcard">
+      <div class="chip" id="chip"></div>
+      <div class="msg" id="msg" hidden>
+        <div class="msg-ava" id="msg-ava"></div>
+        <div class="msg-main">
+          <div class="msg-from" id="msg-from"></div>
+          <div class="msg-text" id="msg-text"></div>
+        </div>
+      </div>
+      <div class="q-row">
+        <div class="capy capy-mini" id="capy-game"></div>
+        <div class="bubble" id="q-text"></div>
+      </div>
+    </div>
+
+    <div class="turn" id="turn" hidden></div>
+
+    <div class="stage" id="stage">
+      <div class="grid" id="grid"></div>
+      <div class="cols" id="cols"></div>
+      <div class="truth-line" id="truth-line" hidden><span id="truth-label"></span></div>
+      <div class="hint" id="hint" hidden><span class="hand">👆</span>Тяни вверх-вниз</div>
+    </div>
+
+    <footer class="controls">
+      <button class="icon-btn js-sound" aria-label="Звук">🔊</button>
+      <button class="icon-btn" id="btn-minus" aria-label="Меньше">−</button>
+      <button class="btn btn-go" id="btn-go">Готово!</button>
+      <button class="icon-btn" id="btn-plus" aria-label="Больше">+</button>
+    </footer>
+
+    <div class="sheet" id="sheet" hidden>
+      <div class="sheet-inner">
+        <div class="res-head">
+          <div class="res-stars" id="res-stars"><i>★</i><i>★</i><i>★</i></div>
+          <div class="res-title" id="res-title"></div>
+          <div class="res-acc" id="res-acc"></div>
+        </div>
+        <div class="res-shield" id="res-shield" hidden></div>
+        <div class="res-explain">
+          <b>Как считать</b>
+          <p id="res-explain"></p>
+        </div>
+        <div class="sheet-btns">
+          <button class="btn btn-ghost" id="btn-retry">↺ Ещё раз</button>
+          <button class="btn" id="btn-next">Дальше →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Итоги одиночной игры -->
+  <section class="screen scroll" id="scr-end" hidden>
+    <div class="end-head">
+      <div class="end-kicker">Итог</div>
+      <div class="end-stars" id="end-stars"></div>
+      <div class="end-title" id="end-title"></div>
+    </div>
+    <div class="capy capy-end" id="capy-end"></div>
+    <div class="end-grid" id="end-grid"></div>
+    <div class="end-btns">
+      <button class="btn btn-big" id="btn-share">📤 Поделиться результатом</button>
+      <button class="btn btn-violet" id="btn-again">↺ Сыграть ещё (новые задания)</button>
+    </div>
+    <div class="panel" id="end-unlocks"></div>
+    <div class="panel" id="end-shields" hidden></div>
+    <div class="panel" id="end-lessons"></div>
+    <div class="end-btns">
+      <button class="btn btn-ghost" id="btn-to-duel">👥 Вызвать друга на дуэль</button>
+      <div class="row">
+        <button class="btn btn-ghost btn-sm" id="btn-menu">В меню</button>
+        <button class="btn btn-ghost btn-sm js-exit">Выйти</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Итоги дуэли -->
+  <section class="screen scroll" id="scr-duel-end" hidden>
+    <div class="end-head">
+      <div class="end-kicker">Дуэль</div>
+      <div class="duel-score" id="duel-score"></div>
+      <div class="end-title" id="duel-title"></div>
+    </div>
+    <div class="capy capy-end" id="capy-duel"></div>
+    <div class="end-grid" id="duel-grid"></div>
+    <div class="end-btns">
+      <button class="btn btn-big" id="btn-duel-share">📤 Поделиться</button>
+      <button class="btn btn-violet" id="btn-rematch">⚔️ Реванш</button>
+      <div class="row">
+        <button class="btn btn-ghost btn-sm" id="btn-duel-menu">В меню</button>
+        <button class="btn btn-ghost btn-sm js-exit">Выйти</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Передай телефон -->
+  <div class="overlay" id="pass" hidden>
+    <div class="pass-card">
+      <div class="pass-emoji">📱➡️🙈</div>
+      <div class="pass-title" id="pass-title">Передай телефон</div>
+      <p id="pass-text"></p>
+      <button class="btn btn-big" id="btn-pass">Я готов(а)!</button>
+    </div>
+  </div>
+
+  <canvas id="fx" aria-hidden="true"></canvas>
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="js/util.js"></script>
+  <script src="js/bridge.js"></script>
+  <script src="js/sound.js"></script>
+  <script src="js/capy.js"></script>
+  <script src="js/fx.js"></script>
+  <script src="js/content.js"></script>
+  <script src="js/share.js"></script>
+  <script src="js/game.js"></script>
 </body>
 </html>
