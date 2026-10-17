@@ -3,7 +3,7 @@
   "rounds": 8,
   "boss": [4, 8],
   "duelRounds": 5,
-  "stopwatch": false,
+  "timer": 20,
   "ratio": {
     "animals": [1.2, 15],
     "countries": [1.3, 40]

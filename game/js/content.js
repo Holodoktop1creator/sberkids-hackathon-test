@@ -10,7 +10,7 @@
     rounds: 8,
     boss: [4, 8],
     duelRounds: 5,
-    stopwatch: false,
+    timer: 20,
     ratio: { animals: [1.2, 15], countries: [1.3, 40] },
     traps: { animals: [], countries: [] },
     ranks: [
@@ -73,6 +73,7 @@
       });
       if (!(cfg.rounds >= 3 && cfg.rounds <= 12)) cfg.rounds = DEFAULTS.rounds;
       if (!(cfg.duelRounds >= 3 && cfg.duelRounds <= 10)) cfg.duelRounds = DEFAULTS.duelRounds;
+      if (!(cfg.timer >= 0 && cfg.timer <= 120)) cfg.timer = DEFAULTS.timer;
       var animals = res[1] && Array.isArray(res[1].animals) ? res[1].animals.map(animal).filter(Boolean) : [];
       var countries = res[2] && Array.isArray(res[2].countries) ? res[2].countries.map(country).filter(Boolean) : [];
       return { cfg: cfg, pools: { animals: animals, countries: countries } };

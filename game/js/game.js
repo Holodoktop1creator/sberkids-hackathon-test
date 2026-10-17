@@ -27,7 +27,7 @@
     acc: [],
     last: null,
     epoch: 0,        // меняется при новом раунде и выходе в меню — отменяет отложенные шаги
-    turnTimes: []
+    timedOut: []     // у кого в этом раунде вышло время
   };
   var MERCATOR = ['greenland', 'canada', 'antarctica', 'africa'];
   var capyEnd = $('capy-end');
@@ -86,43 +86,71 @@
     ['btn-go', 'btn-minus', 'btn-plus'].forEach(function (id) { $(id).disabled = !on; });
   }
 
-  // ---------- Секундомер раунда ----------
-  // Считает вверх и ничем не грозит: без обратного отсчёта и без штрафа за время.
-  var SW = { acc: 0, t0: 0, on: false, raf: 0, sec: -1, el: null, txt: null };
-  // Секундомер включается в content/game.json ("stopwatch": true)
-  function swOn() { return !!(S.content && S.content.cfg.stopwatch); }
-  function fmtSec(ms) { return (Math.floor(ms / 100) / 10).toFixed(1).replace('.', ','); }
-  function swDraw(ms) {
-    var s = fmtSec(ms);
-    if (SW.txt.textContent !== s) SW.txt.textContent = s;
-    var sec = Math.floor(ms / 1000);
-    if (sec !== SW.sec) {
-      SW.sec = sec;
-      if (SW.on && sec > 0) restart(SW.el, 'tick');
-      SW.el.classList.toggle('long', sec >= 15);
+  // ---------- Таймер хода ----------
+  // Секунды на ход — в content/game.json ("timer", 0 — без таймера).
+  // Когда время выходит, ответ фиксируется там, где ребёнок оставил силуэт.
+  var TM = { el: null, ring: null, num: null, total: 0, t0: 0, on: false, raf: 0, sec: -1 };
+  var RING_LEN = 2 * Math.PI * 22;
+  function tmTotal() { return S.content ? S.content.cfg.timer : 0; }
+  function tmDraw(left) {
+    var frac = TM.total ? left / (TM.total * 1000) : 0;
+    TM.ring.style.strokeDashoffset = (RING_LEN * (1 - frac)).toFixed(1);
+    var sec = Math.ceil(left / 1000);
+    if (sec === TM.sec) return;
+    TM.sec = sec;
+    TM.num.textContent = sec;
+    TM.el.setAttribute('data-lvl', sec > 10 ? 'ok' : sec > 6 ? 'mid' : sec > 3 ? 'low' : 'crit');
+    $('board').classList.toggle('hurry', TM.on && sec <= 3);
+    if (TM.on && sec <= 3 && sec > 0) {
+      restart(TM.el, 'beat');
+      App.sound.play('beep', sec);
+      if (sec === 3) App.bridge.vibrate();
     }
   }
-  function swLoop() {
-    if (!SW.on) return;
-    swDraw(SW.acc + performance.now() - SW.t0);
-    SW.raf = requestAnimationFrame(swLoop);
+  function tmLoop() {
+    if (!TM.on) return;
+    var left = TM.total * 1000 - (performance.now() - TM.t0);
+    if (left <= 0) { tmDraw(0); tmStop(); timeUp(); return; }
+    tmDraw(left);
+    TM.raf = requestAnimationFrame(tmLoop);
   }
-  function swStop() {
-    if (SW.on) {
-      SW.acc += performance.now() - SW.t0;
-      SW.on = false;
-      cancelAnimationFrame(SW.raf);
-    }
-    if (SW.el) { SW.el.classList.remove('run'); swDraw(SW.acc); }
-    return SW.acc;
+  function tmStop() {
+    TM.on = false;
+    cancelAnimationFrame(TM.raf);
+    $('board').classList.remove('hurry');
+    if (TM.el) TM.el.classList.remove('run', 'beat');
   }
-  function swReset() { swStop(); SW.acc = 0; SW.sec = -1; swDraw(0); }
-  function swStart() {
-    if (SW.on) return;
-    SW.on = true;
-    SW.t0 = performance.now();
-    SW.el.classList.add('run');
-    swLoop();
+  function tmReset() {
+    tmStop();
+    TM.total = tmTotal();
+    TM.el.hidden = !TM.total;
+    TM.sec = -1;
+    if (TM.total) tmDraw(TM.total * 1000);
+  }
+  function tmStart() {
+    tmReset();
+    if (!TM.total) return;
+    TM.on = true;
+    TM.t0 = performance.now();
+    TM.el.classList.add('run');
+    tmLoop();
+  }
+
+  function timeUp() {
+    if (S.phase !== 'play') return;
+    S.phase = 'timeup';
+    setControls(false);
+    B.enable(false);
+    clearTimeout(S.idleT);
+    B.demo(false, false); // демо не в счёт: остаётся размер, который поставил сам ребёнок
+    S.timedOut[S.turn - 1] = true;
+    App.sound.play('buzzer');
+    App.bridge.vibrate();
+    restart($('timeup'), 'show');
+    var ep = S.epoch;
+    U.wait(900).then(function () {
+      if (ep === S.epoch) lockIn(true);
+    });
   }
 
   // ---------- Раунд ----------
@@ -145,8 +173,8 @@
     var r = S.rounds[i];
     var ep = ++S.epoch;
     S.phase = 'intro';
-    S.turnTimes = [];
-    swReset();
+    S.timedOut = [];
+    tmReset();
     setControls(false);
     $('sheet').hidden = true;
     var k = $('kicker');
@@ -221,8 +249,7 @@
         if (ep === S.epoch && S.phase === 'play' && !S.touched) B.demo(true);
       }, 5000);
     }
-    swReset();
-    swStart();
+    tmStart();
   }
 
   function onBoardChange(g) {
@@ -248,10 +275,11 @@
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { btn.addEventListener(ev, stop); });
   });
 
-  $('btn-go').addEventListener('click', function () {
-    if (S.phase !== 'play') return;
+  // Фиксация ответа: по кнопке или когда вышло время
+  function lockIn(byTimer) {
+    if (S.phase !== (byTimer ? 'timeup' : 'play')) return;
     App.sound.play('lock');
-    S.turnTimes[S.turn - 1] = swStop();
+    tmStop();
     clearTimeout(S.idleT);
     B.demo(false);
     if (S.duel && S.turn === 1) {
@@ -261,7 +289,8 @@
       return;
     }
     reveal();
-  });
+  }
+  $('btn-go').addEventListener('click', function () { lockIn(false); });
 
   function askPass(player) {
     S.phase = 'pass';
@@ -327,8 +356,7 @@
     var pts = points(g);
     var gained = pts * (r.boss ? 2 : 1);
     S.score += gained;
-    var time = S.turnTimes[0] || 0;
-    S.results[S.idx] = { pts: pts, gained: gained, round: r, time: time };
+    S.results[S.idx] = { pts: pts, gained: gained, round: r };
     S.combo = pts >= 65 ? S.combo + 1 : 0;
     S.bestCombo = Math.max(S.bestCombo, S.combo);
 
@@ -349,7 +377,7 @@
       score: '+' + gained + (r.boss ? ' ×2' : ''),
       band: band(pts),
       rank: rankText(pts),
-      time: swOn() ? '⏱ ' + fmtSec(time) + ' с' + (pts >= 85 && time < 4000 ? ' · ⚡ Молния!' : '') : '',
+      time: S.timedOut[0] ? '⏰ Время вышло — засчитали силуэт таким, каким он был' : '',
       ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>У тебя: ' + esc(lines.guess) + '<br>' + esc(lines.miss),
       factOf: r.target.fact ? r.target : r.ref,
       tip: tipFor(r, pts)
@@ -371,13 +399,19 @@
       score: p1 + ' : ' + p2,
       band: 3,
       rank: w === 0 ? 'Ничья! 🤝' : 'Игрок ' + w + ' ближе! 🏆',
-      time: swOn() ? '⏱ ' + fmtSec(S.turnTimes[0] || 0) + ' с : ' + fmtSec(S.turnTimes[1] || 0) + ' с' : '',
+      time: timedOutText(),
       ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>Игрок 1: ' + esc(B.fmtVal(r.target, B.value(r.target, g1))) +
         ' · Игрок 2: ' + esc(B.fmtVal(r.target, B.value(r.target, g2))),
       factOf: r.target.fact ? r.target : r.ref,
       tip: tipFor(r, Math.max(p1, p2))
     });
     celebrate(Math.max(p1, p2));
+  }
+
+  function timedOutText() {
+    var who = [1, 2].filter(function (p) { return S.timedOut[p - 1]; });
+    if (!who.length) return '';
+    return '⏰ Время вышло: ' + who.map(function (p) { return 'Игрок ' + p; }).join(' и ');
   }
 
   function esc(s) {
@@ -461,14 +495,10 @@
     $('end-grid').textContent = grid;
 
     var best = S.results.reduce(function (a, b) { return !a || b.pts > a.pts ? b : a; }, null);
-    var totalTime = S.results.reduce(function (a, b) { return a + (b.time || 0); }, 0);
-    var fast = S.results.filter(function (x) { return x.pts >= 65; })
-      .reduce(function (a, b) { return !a || b.time < a.time ? b : a; }, null);
     $('end-best').innerHTML = '<h3>Лучшие моменты</h3><ul>' +
       (best ? '<li>🎯 ' + esc(best.round.target.name) + ' vs ' + esc(best.round.ref.name) + ' — ' + best.pts + ' ' + U.plural(best.pts, ['очко', 'очка', 'очков']) + '</li>' : '') +
       (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') +
-      (swOn() ? '<li>⏱ Всё время: ' + fmtSec(totalTime) + ' с</li>' : '') +
-      (swOn() && fast ? '<li>⚡ Самый быстрый точный раунд: ' + esc(fast.round.target.name) + ' — ' + fmtSec(fast.time) + ' с</li>' : '') + '</ul>';
+      '</ul>';
 
     $('end-unlocks').innerHTML = '<h3>Гардероб Капи</h3><ul>' + unlocks.map(function (u) {
       var open = S.acc.indexOf(u.id) >= 0;
@@ -492,7 +522,7 @@
     App.sound.play('win');
     App.bridge.finish();
     App.bridge.completed();
-    S.last = { score: S.score, max: max, title: title, grid: grid, time: totalTime };
+    S.last = { score: S.score, max: max, title: title, grid: grid };
   }
 
   function endDuel() {
@@ -548,10 +578,9 @@
   $('btn-share').addEventListener('click', function () {
     var r = S.last;
     if (!r) return;
-    var time = swOn() ? fmtSec(r.time) + ' с' : '';
-    doShare('Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + (time ? ' за ' + time : '') + ' — «' + r.title.name + '» ' + r.grid +
+    doShare('Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + ' — «' + r.title.name + '» ' + r.grid +
       '\nСможешь прикинуть точнее? 😏', {
-      kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name + (time ? ' · ⏱ ' + time : ''),
+      kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name,
       grid: r.grid, capy: { acc: S.acc, mood: 'happy' }, footer: 'Сможешь прикинуть точнее? 😏'
     });
   });
@@ -594,7 +623,7 @@
     App.sound.play('tap');
     S.epoch++;          // отменяем отложенные шаги текущего раунда
     S.phase = 'menu';
-    swStop();
+    tmStop();
     clearTimeout(S.idleT);
     B.demo(false);
     B.enable(false);
@@ -667,7 +696,7 @@
       document.querySelector('[data-mode="chaos"]').disabled = !(a || k);
       $('btn-duel').disabled = !(a || k);
       $('load-error').hidden = a || k;
-      SW.el.hidden = !c.cfg.stopwatch;
+      TM.el.hidden = !c.cfg.timer;
     });
   }
   $('btn-reload').addEventListener('click', loadContent);
@@ -680,12 +709,21 @@
     App.capy.mount($('capy-start'), 'idle');
     App.capy.wear($('capy-start'), ['orange']);
     B.init($('board'), onBoardChange);
-    SW.el = document.createElement('div');
-    SW.el.className = 'stopwatch';
-    SW.el.innerHTML = '<span class="sw-ico">⏱</span><b>0,0</b><small>с</small>';
-    $('board').appendChild(SW.el);
-    SW.txt = SW.el.querySelector('b');
-    SW.el.hidden = true;
+    TM.el = document.createElement('div');
+    TM.el.className = 'timer';
+    TM.el.setAttribute('data-lvl', 'ok');
+    TM.el.innerHTML = '<svg viewBox="0 0 52 52" aria-hidden="true"><circle class="tm-bg" cx="26" cy="26" r="22"/>' +
+      '<circle class="tm-ring" cx="26" cy="26" r="22"/></svg><b></b>';
+    TM.ring = TM.el.querySelector('.tm-ring');
+    TM.num = TM.el.querySelector('b');
+    TM.ring.style.strokeDasharray = RING_LEN.toFixed(1);
+    TM.el.hidden = true;
+    $('board').appendChild(TM.el);
+    var stamp = document.createElement('div');
+    stamp.className = 'timeup';
+    stamp.id = 'timeup';
+    stamp.textContent = '⏰ ВРЕМЯ!';
+    $('board').appendChild(stamp);
     syncSound();
     loadContent();
   }

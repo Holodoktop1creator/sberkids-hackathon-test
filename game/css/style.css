@@ -305,23 +305,50 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .close-x:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
 
-/* ---------- Секундомер ---------- */
-.stopwatch {
-  position: absolute; right: 10px; top: 8px; z-index: 2; pointer-events: none;
-  display: flex; align-items: baseline; gap: 3px;
-  background: var(--ink); color: #fff; border-radius: 12px; padding: 4px 9px 4px 7px;
-  font-weight: 900; font-variant-numeric: tabular-nums; border: 2px solid var(--ink);
+/* ---------- Таймер хода ---------- */
+.timer {
+  position: absolute; right: 8px; top: 6px; z-index: 2; width: 58px; height: 58px; pointer-events: none;
+  border-radius: 50%; background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink);
+  --tc: #22c55e;
 }
-.stopwatch b { font-size: 20px; min-width: 2.6ch; text-align: right; }
-.stopwatch small { font-size: 12px; opacity: .7; }
-.stopwatch .sw-ico { font-size: 16px; display: inline-block; }
-.stopwatch.run { background: var(--hot); }
-.stopwatch.run .sw-ico { animation: swSpin 1s steps(8) infinite; }
-.stopwatch.long.run { background: var(--violet); }
-.stopwatch.tick { animation: swTick .3s cubic-bezier(.2, 1.8, .4, 1); }
-@keyframes swSpin { to { transform: rotate(360deg); } }
-@keyframes swTick { 40% { transform: scale(1.18) rotate(-4deg); } }
-.res-time { flex-basis: 100%; text-align: center; font-size: 15px; font-weight: 900; color: var(--violet-dark); }
+.timer svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.tm-bg { fill: #fff; stroke: rgba(27, 19, 64, .14); stroke-width: 6; transition: fill .3s; }
+.tm-ring { fill: none; stroke: var(--tc); stroke-width: 6; stroke-linecap: round; transition: stroke .4s; }
+.timer b {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 22px; font-weight: 900; color: var(--ink); font-variant-numeric: tabular-nums; transition: color .3s;
+}
+.timer[data-lvl="mid"] { --tc: #f5b301; }
+.timer[data-lvl="low"] { --tc: var(--orange); }
+.timer[data-lvl="crit"] { --tc: var(--hot); border-color: var(--hot); }
+.timer[data-lvl="crit"] .tm-bg { fill: #ffe3f0; }
+.timer[data-lvl="crit"] b { color: var(--hot); font-size: 26px; }
+.timer.run[data-lvl="low"] { animation: tmPulse .5s ease-in-out infinite; }
+.timer.run[data-lvl="crit"] { animation: tmShake .11s linear infinite; }
+.timer.beat b { animation: tmBeat .45s cubic-bezier(.2, 1.8, .4, 1); }
+@keyframes tmPulse { 50% { transform: scale(1.08); } }
+@keyframes tmShake { 25% { transform: translate(-2px, 1px) rotate(-6deg) scale(1.08); } 75% { transform: translate(2px, -1px) rotate(6deg) scale(1.08); } }
+@keyframes tmBeat { from { transform: scale(1.9); } }
+.board.hurry { animation: hurryGlow .5s ease-in-out infinite; }
+@keyframes hurryGlow { 50% { box-shadow: 0 6px 0 var(--ink), 0 0 0 4px var(--hot), 0 0 30px rgba(255, 45, 149, .8); } }
+
+/* Штамп «Время!» */
+.timeup {
+  position: absolute; left: 50%; top: 42%; z-index: 4; pointer-events: none; opacity: 0;
+  transform: translate(-50%, -50%) rotate(-8deg);
+  font-size: 40px; font-weight: 900; white-space: nowrap; color: #fff;
+  background: var(--hot); border: 4px solid var(--ink); border-radius: 18px; padding: 6px 16px;
+  box-shadow: 0 6px 0 var(--ink);
+}
+.timeup.show { animation: timeupSlam 1.1s cubic-bezier(.2, 1.4, .4, 1) forwards; }
+@keyframes timeupSlam {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(-20deg) scale(3); }
+  25% { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
+  80% { opacity: 1; transform: translate(-50%, -50%) rotate(-8deg) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(-8deg) scale(.9); }
+}
+.res-time { flex-basis: 100%; text-align: center; font-size: 15px; font-weight: 900; color: var(--hot); }
+.res-time:empty { display: none; }
 
 /* ---------- Карточка «поделиться» ---------- */
 .share-card { text-align: center; width: 100%; max-width: 340px; animation: pop .35s cubic-bezier(.2, 1.4, .4, 1); }

@@ -230,9 +230,10 @@
     kick();
   }
 
-  function setDemo(on) {
+  // bake = false — демо просто гаснет, размер возвращается к поставленному ребёнком
+  function setDemo(on, bake) {
     if (demo.on === on || !el) return;
-    if (!on && R) st.g[st.active] = gOf(st.active); // оставляем тот размер, который ребёнок видит
+    if (!on && R && bake !== false) st.g[st.active] = gOf(st.active); // оставляем тот размер, который ребёнок видит
     demo.on = on;
     demo.k = 1;
     el.classList.toggle('demo', on);
