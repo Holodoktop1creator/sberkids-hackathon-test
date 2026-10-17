@@ -62,7 +62,13 @@
     soft: function () { tone(440, 0.18, 'sine', 0.1); tone(392, 0.25, 'sine', 0.1, 0.16); },
     crumble: function () { noise(0.6, 0.25); tone(300, 0.5, 'sawtooth', 0.04, 0, 90); },
     shield: function () { [659, 880, 1175].forEach(function (f, i) { tone(f, 0.2, 'square', 0.05, i * 0.07); }); },
-    swoosh: function () { tone(300, 0.22, 'sine', 0.07, 0, 1200); }
+    swoosh: function () { tone(300, 0.22, 'sine', 0.07, 0, 1200); },
+    boom: function () { tone(150, 0.55, 'sine', 0.4, 0, 42); noise(0.12, 0.12); },
+    slam: function () { noise(0.15, 0.2); tone(110, 0.25, 'square', 0.08, 0, 55); },
+    combo: function (n) {
+      var base = 523 * Math.pow(1.122, Math.min(n, 8));
+      [1, 1.26, 1.5, 2].forEach(function (k, i) { tone(base * k, 0.14, 'square', 0.06, i * 0.05); });
+    }
   };
 
   App.sound = {

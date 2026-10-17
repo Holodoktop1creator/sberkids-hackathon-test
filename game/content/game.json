@@ -1,0 +1,82 @@
+{
+  "version": 2,
+  "rounds": 8,
+  "boss": [4, 8],
+  "duelRounds": 5,
+  "ratio": {
+    "animals": [1.2, 15],
+    "countries": [1.3, 40]
+  },
+  "traps": {
+    "animals": [
+      ["orca", "great_white"],
+      ["ostrich", "human"],
+      ["raptor", "human"],
+      ["blue_whale", "trex"],
+      ["megalodon", "whale_shark"],
+      ["polar_bear", "human"],
+      ["capybara", "cat"],
+      ["giraffe", "elephant"],
+      ["hummingbird", "bee"],
+      ["koala", "cat"],
+      ["moose", "horse"],
+      ["penguin", "human"],
+      ["croc", "human"],
+      ["hippo", "lion"],
+      ["axolotl", "mouse"]
+    ],
+    "countries": [
+      ["africa", "greenland"],
+      ["canada", "usa48"],
+      ["brazil", "australia"],
+      ["japan", "germany"],
+      ["madagascar", "uk"],
+      ["indonesia", "greenland"],
+      ["iceland", "cuba"],
+      ["antarctica", "australia"],
+      ["france", "spain"],
+      ["new_zealand", "uk"],
+      ["kazakhstan", "argentina"],
+      ["finland", "italy"],
+      ["switzerland", "netherlands"]
+    ]
+  },
+  "ranks": [
+    { "min": 100, "text": "ИДЕАЛЬНО! 🎯" },
+    { "min": 85, "text": "ИМБА! 🔥" },
+    { "min": 65, "text": "ХОРОШ! 😎" },
+    { "min": 40, "text": "ТЕПЛО 🙂" },
+    { "min": 15, "text": "ХОЛОДНО 🥶" },
+    { "min": 0, "text": "МИМО 😵‍💫" }
+  ],
+  "titles": [
+    { "min": 0, "name": "Капибара-стажёр", "emoji": "🌱" },
+    { "min": 350, "name": "Прикидчик", "emoji": "🧮" },
+    { "min": 550, "name": "Глаз-алмаз", "emoji": "💎" },
+    { "min": 750, "name": "Мастер масштаба", "emoji": "😎" },
+    { "min": 900, "name": "Легенда прикидки", "emoji": "👑" }
+  ],
+  "unlocks": [
+    { "score": 300, "id": "orange", "label": "🍊 Апельсинка" },
+    { "score": 550, "id": "glasses", "label": "😎 Очки" },
+    { "score": 750, "id": "medal", "label": "🏅 Медаль" },
+    { "score": 900, "id": "crown", "label": "👑 Корона" }
+  ],
+  "tips": {
+    "animals": [
+      "Считай эталонами: сколько раз чёрный силуэт поместится в белом?",
+      "Человек — 1,7 м, кошка — около полуметра. Удобные линейки!",
+      "На фото без фона все звери кажутся одного размера. Сравнивай с эталоном!"
+    ],
+    "countries": [
+      "Площадь растёт быстрее размера: фигура вдвое шире — уже в 4 раза больше!",
+      "Привычная карта растягивает страны у полюсов. Тут все страны без растяжения.",
+      "Считай эталонами: сколько раз чёрная страна поместится в белой?"
+    ]
+  },
+  "lessons": {
+    "animals": "Размер удобно мерить «во сколько раз» по эталону: косатка = 1,6 белой акулы.",
+    "countries": "Плоские карты врут: Гренландия выглядит как Африка, а Африка в 14 раз больше.",
+    "area": "Если фигура стала в 2 раза шире и выше, её площадь выросла в 4 раза."
+  }
+}

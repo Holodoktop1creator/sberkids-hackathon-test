@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>bbox силуэтов</title>
+<!-- Служебная страница сборки: меряет рамки силуэтов и показывает их сеткой.
+     Откройте через статический сервер из корня репозитория: /tools/bbox.html -->
+<style>
+  body { font: 12px system-ui; margin: 8px; background: #eee; }
+  .g { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .c { background: #fff; padding: 4px; text-align: center; }
+  svg { width: 100%; height: 70px; background: #fafafa; }
+</style>
+<div class="g" id="g"></div>
+<pre id="out"></pre>
+<script>
+fetch('animals_raw.json').then(r => r.json()).then(list => {
+  const boxes = {};
+  const g = document.getElementById('g');
+  list.forEach(a => {
+    const c = document.createElement('div');
+    c.className = 'c';
+    c.innerHTML = '<svg viewBox="' + a.vb.join(' ') + '"><g class="w">' + a.svg + '</g></svg><div>' + a.name + ' · ' + a.dim + '</div>';
+    g.appendChild(c);
+    const b = c.querySelector('.w').getBBox();
+    boxes[a.id] = [b.x, b.y, b.width, b.height];
+    c.querySelector('svg').setAttribute('viewBox', [b.x, b.y, b.width, b.height].join(' '));
+  });
+  document.getElementById('out').textContent = JSON.stringify(boxes);
+  window.BOXES = boxes;
+});
+</script>

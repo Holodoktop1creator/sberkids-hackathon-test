@@ -2,34 +2,31 @@
   'use strict';
   var App = window.App;
   var U = App.util;
+  var B = App.board;
   function $(id) { return document.getElementById(id); }
-
-  var LABEL_H = 26;   // подпись под башней
-  var TOP_H = 66;     // место над башней: значение и эмодзи
 
   var S = {
     content: null,
-    mode: 'solo',     // solo | duel
-    levels: [],
+    mode: 'chaos',
+    duel: false,
+    rounds: [],
     idx: 0,
-    best: [],         // лучшие звёзды по уровням текущего захода
-    shields: [],
-    seen: {},
-    record: 0,
-    acc: [],          // аксессуары Капи, открытые в этой сессии
-    phase: 'menu',    // play | pass | reveal | sheet | end
+    results: [],
+    score: 0,
+    combo: 0,
+    bestCombo: 0,
     turn: 1,
-    startVal: 0,
     duelScore: [0, 0],
     duelMarks: [],
+    phase: 'menu',   // play | pass | intro | reveal | sheet | end
     hinted: false,
     runs: 0,
+    record: 0,
+    acc: [],
     last: null
   };
-  var L = null;
-  var cols = {};
-  var G = { H: 200 };
-  var capyGame = $('capy-game');
+  var MERCATOR = ['greenland', 'canada', 'antarctica', 'africa'];
+  var capyEnd = $('capy-end');
 
   // ---------- Экраны ----------
   function show(id) {
@@ -40,299 +37,163 @@
       if (on) { e.classList.remove('enter'); void e.offsetWidth; e.classList.add('enter'); }
     });
   }
+  function restart(el, cls) { el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls); }
 
-  // ---------- Значения и единицы ----------
-  function unitText(v, l) { return Array.isArray(l.unit) ? U.plural(v, l.unit) : l.unit; }
-  function valText(v, l) { return U.fmt(v) + ' ' + unitText(v, l); }
-  function snap(v) { return U.clamp(Math.round(v / L.step) * L.step, 0, L.max); }
-  function errOf(l, g) { return l.answer > 0 ? Math.abs(g - l.answer) / l.answer : g / l.max; }
-
-  function score(l, g) {
-    var err = errOf(l, g);
-    var stars;
-    if (l.scam) stars = g === 0 ? 3 : 0; // «вернут немного» — тоже неверно: ловушка есть ловушка
-    else if (l.answer === 0) stars = g === 0 ? 3 : err <= 0.05 ? 2 : err <= 0.15 ? 1 : 0;
-    else stars = err <= 0.05 ? 3 : err <= 0.15 ? 2 : err <= 0.3 ? 1 : 0;
-    return { err: err, stars: stars, acc: Math.max(0, Math.round((1 - err) * 100)) };
+  // ---------- Очки: как в Size It Up ----------
+  // ±6% → 100, ошибка в 2 раза → ~45, в 5 раз и больше → 0
+  function points(g) {
+    var e = Math.abs(Math.log(g));
+    var ok = Math.log(1.06);
+    if (e <= ok) return 100;
+    var x = (e - ok) / (Math.log(5) - ok);
+    return x >= 1 ? 0 : Math.round(100 * Math.pow(1 - x, 1.52));
   }
-
-  // ---------- Башни ----------
-  function makeCol(kind, label, emoji) {
-    var root = document.createElement('div');
-    root.className = 'col col-' + kind;
-    root.innerHTML =
-      '<div class="col-body"><div class="col-track"><div class="col-fill"></div></div>' +
-      '<div class="col-top"><span class="col-val"></span><span class="col-emoji"></span></div></div>' +
-      '<div class="col-label"></div>';
-    var c = {
-      root: root,
-      body: root.querySelector('.col-body'),
-      track: root.querySelector('.col-track'),
-      fill: root.querySelector('.col-fill'),
-      top: root.querySelector('.col-top'),
-      val: root.querySelector('.col-val'),
-      value: 0,
-      set: function (v) {
-        this.value = v;
-        var h = (L.max ? v / L.max : 0) * G.H;
-        this.fill.style.transform = 'translateY(' + (G.H - h) + 'px)';
-        this.top.style.transform = 'translateY(' + (-h) + 'px)';
-        this.val.innerHTML = U.fmt(v) + '<small>' + unitText(v, L) + '</small>';
-      }
-    };
-    root.querySelector('.col-emoji').textContent = emoji || '';
-    root.querySelector('.col-label').textContent = label;
-    $('cols').appendChild(root);
-    return c;
+  function band(p) { return p >= 85 ? 3 : p >= 65 ? 2 : p >= 40 ? 1 : 0; }
+  function square(p) { return ['⬜', '🟧', '🟨', '🟩'][band(p)]; }
+  function rankText(p) {
+    var r = S.content.cfg.ranks;
+    for (var i = 0; i < r.length; i++) if (p >= r[i].min) return r[i].text;
+    return '';
   }
-
-  function patternFor() {
-    return L.unit !== '₽' && G.H / L.max >= 6 ? 'pat-blocks' : 'pat-coins';
-  }
-
-  function niceStep(max) {
-    var raw = max / 5;
-    var p = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
-    var n = raw / p;
-    return Math.max(L.step, (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * p);
-  }
-
-  function drawGrid() {
-    var grid = $('grid');
-    var step = niceStep(L.max);
-    var html = '';
-    for (var v = 0; v <= L.max + 1e-9; v += step) {
-      var y = LABEL_H + v / L.max * G.H;
-      html += '<div class="gl' + (v === 0 ? ' zero' : '') + '" style="bottom:' + y + 'px"><span>' + (v === 0 ? '0' : U.fmt(v)) + '</span></div>';
-    }
-    grid.innerHTML = html;
-  }
-
-  function measure() {
-    if (!L) return;
-    var st = $('stage');
-    G.H = Math.max(80, st.clientHeight - LABEL_H - TOP_H);
-    st.style.setProperty('--H', G.H + 'px');
-    st.style.setProperty('--seg', (G.H / L.max) + 'px');
-    var pat = patternFor();
-    Object.keys(cols).forEach(function (k) {
-      cols[k].fill.className = 'col-fill ' + pat;
-      cols[k].set(cols[k].value);
-    });
-    drawGrid();
-    if (!$('truth-line').hidden) placeTruthLine();
-  }
-
-  function placeTruthLine() {
-    $('truth-line').style.bottom = (LABEL_H + L.answer / L.max * G.H) + 'px';
-  }
-
-  function active() {
-    if (S.mode === 'duel') return S.turn === 1 ? cols.p1 : cols.p2;
-    return cols.p1;
-  }
-  function setActive(c) {
-    Object.keys(cols).forEach(function (k) { cols[k].root.classList.toggle('active', cols[k] === c); });
-  }
-
-  function animateCol(col, from, to, dur) {
-    return new Promise(function (res) {
-      var t0 = performance.now();
-      function step(t) {
-        var k = Math.min(1, (t - t0) / dur);
-        col.set(Math.round(from + (to - from) * U.easeOut(k)));
-        if (k < 1) requestAnimationFrame(step);
-        else { col.set(to); res(); }
-      }
-      requestAnimationFrame(step);
-    });
-  }
-
-  // ---------- Желе: башня тянется и пружинит ----------
-  var wob = { x: 0, v: 0, raf: 0, col: null };
-  function kick(f) {
-    wob.v += f;
-    wob.col = active();
-    if (!wob.raf) wob.raf = requestAnimationFrame(wobStep);
-  }
-  function wobStep() {
-    wob.v += -wob.x * 0.2;
-    wob.v *= 0.8;
-    wob.x += wob.v;
-    var s = U.clamp(wob.x, -0.16, 0.16);
-    if (Math.abs(wob.x) < 0.001 && Math.abs(wob.v) < 0.001) {
-      wob.raf = 0; wob.x = wob.v = 0;
-      if (wob.col) wob.col.body.style.transform = '';
-      return;
-    }
-    if (wob.col) wob.col.body.style.transform = 'scale(' + (1 - s * 0.6) + ',' + (1 + s) + ')';
-    wob.raf = requestAnimationFrame(wobStep);
-  }
+  function maxScore() { return S.rounds.reduce(function (a, r) { return a + (r.boss ? 200 : 100); }, 0); }
 
   // ---------- HUD ----------
   function updateHud() {
-    var dots = '';
-    for (var i = 0; i < S.levels.length; i++) {
-      var cls = '';
-      if (S.mode === 'solo' && S.best[i] !== undefined) cls = 's' + S.best[i];
-      else if (S.mode === 'duel' && S.duelMarks[i] !== undefined) cls = 's3';
+    var html = '';
+    for (var i = 0; i < S.rounds.length; i++) {
+      var cls = S.rounds[i].boss ? 'boss' : '';
+      if (S.duel) { if (S.duelMarks[i] !== undefined) cls += ' s3'; }
+      else if (S.results[i]) cls += ' s' + band(S.results[i].pts);
       if (i === S.idx && S.phase !== 'sheet') cls += ' cur';
-      dots += '<i class="' + cls + '"></i>';
+      html += '<i class="' + cls + '"></i>';
     }
-    $('dots').innerHTML = dots;
+    $('dots').innerHTML = html;
     var hs = $('hud-score');
-    hs.innerHTML = S.mode === 'duel'
-      ? '<span style="color:var(--lime)">' + S.duelScore[0] + '</span> : <span style="color:var(--pink)">' + S.duelScore[1] + '</span>'
-      : '⭐ ' + total();
-    hs.classList.remove('bump'); void hs.offsetWidth; hs.classList.add('bump');
+    hs.innerHTML = S.duel
+      ? S.duelScore[0] + ' : <span style="color:var(--hot)">' + S.duelScore[1] + '</span>'
+      : String(S.score);
+    restart(hs, 'bump');
+    var c = $('combo');
+    c.hidden = S.duel || S.combo < 2;
+    if (!c.hidden) { c.textContent = '🔥 ×' + S.combo; restart(c, 'combo'); }
   }
-  function total() { return S.best.reduce(function (a, b) { return a + (b || 0); }, 0); }
 
   function setControls(on) {
     ['btn-go', 'btn-minus', 'btn-plus'].forEach(function (id) { $(id).disabled = !on; });
   }
 
-  // ---------- Уровень ----------
-  function startValue() {
-    if (L.start !== undefined) return L.start;
-    var v, tries = 0;
-    do { v = snap(U.rand(0.12, 0.9) * L.max); tries++; }
-    while (tries < 30 && Math.abs(v - L.answer) < L.max * 0.18);
-    return v;
+  // ---------- Раунд ----------
+  function askText(r) {
+    if (r.kind === 'countries') return 'какая площадь?';
+    return r.target.dim === 'tall' ? 'сколько в высоту?' : r.target.dim === 'tail' ? 'сколько в длину с хвостом?' : 'сколько в длину?';
+  }
+  function kickerText(r, i) {
+    if (r.boss) return '⚡ БОСС-РАУНД · очки ×2';
+    if (r.rematch) return '🔁 РЕВАНШ · новый эталон';
+    return (r.kind === 'countries' ? '🌍 ' : '🐾 ') + 'Раунд ' + (i + 1) + ' из ' + S.rounds.length;
   }
 
-  function loadLevel(i) {
+  function startG() {
+    return Math.random() < 0.5 ? U.rand(0.35, 0.65) : U.rand(1.55, 2.6);
+  }
+
+  function playRound(i) {
     S.idx = i;
-    L = S.levels[i];
-    var ch = S.content.chapters[L.chapter];
-    $('chip').textContent = ch.icon + ' ' + ch.name;
-    var q = $('qcard');
-    q.style.animation = 'none'; void q.offsetWidth; q.style.animation = '';
-    if (L.msg) {
-      $('msg').hidden = false;
-      $('msg-ava').textContent = L.msg.ava || '💬';
-      $('msg-from').textContent = L.msg.from;
-      $('msg-text').textContent = L.msg.text;
-    } else {
-      $('msg').hidden = true;
-    }
-    $('q-text').textContent = L.q;
-
-    $('cols').innerHTML = '';
-    cols = {};
-    if (L.ref) cols.ref = makeCol('ref', L.ref.label, L.ref.emoji);
-    if (S.mode === 'duel') {
-      cols.p1 = makeCol('player', 'Игрок 1', L.item);
-      cols.p2 = makeCol('p2', 'Игрок 2', L.item);
-    } else {
-      cols.p1 = makeCol('player', 'Твоя башня', L.item);
-    }
-    cols.truth = makeCol('truth', 'Ответ', '✅');
-    cols.truth.body.style.opacity = '0';
-    $('truth-line').hidden = true;
+    var r = S.rounds[i];
+    S.phase = 'intro';
+    setControls(false);
     $('sheet').hidden = true;
-
-    measure();
-    if (cols.ref) cols.ref.set(L.ref.value);
-    S.startVal = startValue();
-    cols.p1.set(S.startVal);
-    if (cols.p2) cols.p2.set(S.startVal);
-    cols.truth.set(0);
-
-    App.capy.mood(capyGame, 'idle');
-    S.turn = 1;
-    if (S.mode === 'duel') {
-      cols.p2.root.classList.add('hidden-turn');
-      askPass(1);
-    } else {
-      beginTurn();
-    }
+    var k = $('kicker');
+    k.textContent = kickerText(r, i);
+    k.className = 'kicker' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
+    $('target').textContent = r.target.name;
+    restart($('target'), 'in');
+    $('ask').textContent = askText(r);
+    $('board').classList.toggle('boss', !!r.boss);
+    $('turn').hidden = true;
+    B.setRound(r, { start: startG() });
+    B.enable(false);
     updateHud();
+    showIntro(r).then(function () {
+      if (S.duel) askPass(1);
+      else beginTurn();
+    });
+  }
+
+  function showIntro(r) {
+    var tag = $('intro-tag');
+    tag.textContent = r.boss ? '⚡ БОСС ×2 ⚡' : r.rematch ? '🔁 РЕВАНШ' : 'Раунд ' + (S.idx + 1);
+    tag.className = 'intro-tag' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
+    $('intro-a').textContent = r.target.name;
+    $('intro-b').innerHTML = '';
+    $('intro-b').appendChild(document.createTextNode(r.ref.name));
+    var sm = document.createElement('small');
+    sm.textContent = 'эталон';
+    $('intro-b').appendChild(sm);
+    var ov = $('intro');
+    ov.hidden = false;
+    // перезапуск анимаций
+    Array.prototype.forEach.call(ov.children, function (c) { c.style.animation = 'none'; void c.offsetWidth; c.style.animation = ''; });
+    App.sound.play('swoosh');
+    setTimeout(function () { App.sound.play('boom'); }, 160);
+    return new Promise(function (res) {
+      var done = false;
+      function finish() {
+        if (done) return;
+        done = true;
+        ov.hidden = true;
+        ov.removeEventListener('pointerdown', finish);
+        res();
+      }
+      ov.addEventListener('pointerdown', finish);
+      setTimeout(finish, r.boss ? 1500 : 1100);
+    });
   }
 
   function beginTurn() {
     S.phase = 'play';
     setControls(true);
-    setActive(active());
-    var t = $('turn');
-    if (S.mode === 'duel') {
+    B.enable(true);
+    if (S.duel) {
+      B.setTurn(S.turn - 1, S.turn === 1 ? [true, false] : [false, true]);
+      var t = $('turn');
       t.hidden = false;
       t.className = 'turn p' + S.turn;
-      t.textContent = S.turn === 1 ? 'Ходит Игрок 1' : 'Ходит Игрок 2';
+      t.textContent = S.turn === 1 ? 'Тянет Игрок 1 (белый)' : 'Тянет Игрок 2 (розовый)';
     } else {
-      t.hidden = true;
+      B.setTurn(0, [true, false]);
     }
-    $('hint').hidden = S.hinted;
+    $('hint').classList.toggle('go', !S.hinted);
   }
 
-  function hideHint() {
-    if (!S.hinted) { S.hinted = true; $('hint').hidden = true; }
+  function onBoardChange(g) {
+    App.sound.play('tick', U.clamp((Math.log(g) + 2) / 4, 0, 1));
+    if (!S.hinted) { S.hinted = true; $('hint').classList.remove('go'); }
   }
 
-  // ---------- Перетаскивание ----------
-  var drag = null;
-  var lastTick = 0;
-  var stage = $('stage');
-
-  stage.addEventListener('pointerdown', function (e) {
-    if (S.phase !== 'play') return;
-    drag = { y: e.clientY, v: active().value, last: e.clientY, id: e.pointerId };
-    try { stage.setPointerCapture(e.pointerId); } catch (_) { /* не критично */ }
-    hideHint();
-    App.capy.mood(capyGame, 'think');
-  });
-  stage.addEventListener('pointermove', function (e) {
-    if (!drag || e.pointerId !== drag.id || S.phase !== 'play') return;
-    var col = active();
-    var v = snap(drag.v + (drag.y - e.clientY) / G.H * L.max);
-    if (v !== col.value) {
-      col.set(v);
-      var now = performance.now();
-      if (now - lastTick > 35) { App.sound.play('tick', v / L.max); lastTick = now; }
-    }
-    kick((drag.last - e.clientY) * 0.004);
-    drag.last = e.clientY;
-  });
-  function endDrag() {
-    if (!drag) return;
-    drag = null;
-    if (S.phase === 'play') App.capy.mood(capyGame, 'idle');
-  }
-  stage.addEventListener('pointerup', endDrag);
-  stage.addEventListener('pointercancel', endDrag);
-
-  function nudge(d) {
-    if (S.phase !== 'play') return false;
-    var col = active();
-    var v = snap(col.value + d * L.step);
-    if (v === col.value) return false;
-    col.set(v);
-    App.sound.play('tick', v / L.max);
-    kick(d * 0.05);
-    hideHint();
-    return true;
-  }
-  // кнопки ± с автоповтором при удержании
-  [['btn-minus', -1], ['btn-plus', 1]].forEach(function (p) {
+  // ---------- Кнопки ----------
+  [['btn-minus', 1 / 1.06], ['btn-plus', 1.06]].forEach(function (p) {
     var btn = $(p[0]);
     var timer = 0;
     function stop() { clearTimeout(timer); clearInterval(timer); timer = 0; }
+    function step() {
+      if (S.phase !== 'play') { stop(); return; }
+      B.nudge(S.turn - 1, p[1]);
+    }
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
-      if (!nudge(p[1])) return;
-      timer = setTimeout(function () {
-        timer = setInterval(function () { if (!nudge(p[1])) stop(); }, 60);
-      }, 350);
+      step();
+      timer = setTimeout(function () { timer = setInterval(step, 70); }, 320);
     });
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { btn.addEventListener(ev, stop); });
   });
 
-  // ---------- Готово / дуэль ----------
   $('btn-go').addEventListener('click', function () {
     if (S.phase !== 'play') return;
     App.sound.play('lock');
-    if (S.mode === 'duel' && S.turn === 1) {
-      cols.p1.root.classList.add('hidden-turn');
+    if (S.duel && S.turn === 1) {
+      B.enable(false);
+      B.setTurn(0, [false, false]);
       askPass(2);
       return;
     }
@@ -342,22 +203,17 @@
   function askPass(player) {
     S.phase = 'pass';
     setControls(false);
-    setActive(null);
-    $('pass-title').textContent = 'Ходит Игрок ' + player;
+    S.turn = player;
+    $('pass-title').textContent = 'Ход Игрока ' + player;
     $('pass-text').textContent = player === 1
-      ? 'Задание ' + (S.idx + 1) + ' из ' + S.levels.length + '. Игрок 2 — отвернись 🙈'
-      : 'Игрок 1 спрятал(а) свой ответ. Передай телефон — и не подглядывай 🙈';
-    $('btn-pass').textContent = player === 1 ? 'Я Игрок 1, погнали!' : 'Я Игрок 2, погнали!';
+      ? 'Раунд ' + (S.idx + 1) + ' из ' + S.rounds.length + '. Игрок 2 — отвернись 🙈'
+      : 'Игрок 1 спрятал(а) ответ. Передай телефон — и не подглядывай 🙈';
+    $('btn-pass').textContent = 'Я Игрок ' + player + ', погнали!';
     $('pass').hidden = false;
   }
   $('btn-pass').addEventListener('click', function () {
     App.sound.play('tap');
     $('pass').hidden = true;
-    // первый игрок уже спрятал ответ — значит, ходит второй
-    if (cols.p1.root.classList.contains('hidden-turn')) {
-      S.turn = 2;
-      cols.p2.root.classList.remove('hidden-turn');
-    }
     beginTurn();
   });
 
@@ -365,143 +221,135 @@
   function reveal() {
     S.phase = 'reveal';
     setControls(false);
-    setActive(null);
-    hideHint();
-    if (cols.p2) cols.p1.root.classList.remove('hidden-turn');
     $('turn').hidden = true;
-    cols.truth.body.style.opacity = '1';
-    App.sound.play('rise');
-    animateCol(cols.truth, 0, L.answer, L.answer > 0 ? 900 : 250).then(function () {
-      $('truth-label').textContent = '✓ ответ';
-      $('truth-line').hidden = false;
-      placeTruthLine();
-      if (S.mode === 'duel') duelResult(); else soloResult();
+    if (S.duel) B.setTurn(-1, [true, true]);
+    B.reveal();
+    App.sound.play('slam');
+    restart($('board'), 'shake');
+    U.wait(450).then(function () {
+      if (S.duel) duelResult(); else soloResult();
     });
   }
 
-  function crumble(col) {
-    var fy = (G.H - col.value / L.max * G.H) + 'px';
-    col.fill.style.setProperty('--fy', fy);
-    col.root.classList.add('crumble');
-    App.fx.rain(col.track.getBoundingClientRect(), L.item, 14);
-    App.sound.play('crumble');
-    App.bridge.vibrate();
-    stage.classList.remove('shake'); void stage.offsetWidth; stage.classList.add('shake');
-    return U.wait(750).then(function () {
-      col.root.classList.remove('crumble');
-      col.set(0);
-    });
-  }
-
-  function celebrate(stars, col) {
-    var r = col.track.getBoundingClientRect();
-    var x = r.left + r.width / 2;
-    var y = r.bottom - col.value / L.max * G.H;
-    if (stars === 3) {
-      App.fx.confetti(60);
-      App.fx.burst(x, y, ['⭐', '✨', '🪙', L.item], 14);
-      App.sound.play('win');
-      App.bridge.vibrate();
-    } else if (stars === 2) {
-      App.fx.burst(x, y, ['⭐', '✨'], 8);
-      App.bridge.vibrate();
-    } else {
-      App.sound.play('soft');
+  function ratioLines(r, g) {
+    var t = r.target, ref = r.ref;
+    var k = t.value / ref.value;
+    var gv = B.value(t, g) / ref.value;
+    var flip = k < 1;
+    function eq(x) {
+      return flip ? ref.name + ' = ' + U.fmtRatio(1 / x) + ' × ' + t.name : t.name + ' = ' + U.fmtRatio(x) + ' × ' + ref.name;
     }
+    var off = g > 1 ? g : 1 / g;
+    if (r.kind === 'countries') off = off * off;
+    var miss = points(g) === 100 ? 'В точку! 🎯'
+      : 'Промах: ' + (r.kind === 'countries' ? 'площадь' : 'размер') + ' в ' + U.fmtRatio(off) + ' раза ' + (g > 1 ? 'больше' : 'меньше');
+    return { truth: eq(k), guess: eq(gv), miss: miss };
+  }
+
+  function tipFor(r, pts) {
+    var cfg = S.content.cfg;
+    if (r.kind === 'countries') {
+      if (MERCATOR.indexOf(r.target.id) >= 0 || MERCATOR.indexOf(r.ref.id) >= 0) return '🗺️ ' + (cfg.lessons.countries || '');
+      if (pts < 65) return '📐 ' + (cfg.lessons.area || U.pick(cfg.tips.countries));
+      return '';
+    }
+    return pts < 65 ? '💡 ' + U.pick(cfg.tips.animals) : '';
   }
 
   function soloResult() {
-    var g = cols.p1.value;
-    var r = score(L, g);
-    var trapFail = L.answer === 0 && g > 0;
-    var chain = trapFail ? crumble(cols.p1) : Promise.resolve();
-    chain.then(function () {
-      var prev = S.best[S.idx];
-      S.best[S.idx] = prev === undefined ? r.stars : Math.max(prev, r.stars);
-      var mood = r.stars === 3 ? 'happy' : r.stars === 2 ? 'ok' : trapFail ? 'shock' : 'idle';
-      App.capy.mood(capyGame, mood);
+    var r = S.rounds[S.idx];
+    var g = B.getG(0);
+    var pts = points(g);
+    var gained = pts * (r.boss ? 2 : 1);
+    S.score += gained;
+    S.results[S.idx] = { pts: pts, gained: gained, round: r };
+    S.combo = pts >= 65 ? S.combo + 1 : 0;
+    S.bestCombo = Math.max(S.bestCombo, S.combo);
 
-      var shield = null;
-      if (L.scam && r.stars === 3) {
-        if (L.shield && S.shields.indexOf(L.shield) < 0) S.shields.push(L.shield);
-        shield = { ok: true, text: 'Новый щит: ' + (L.shield || '🛡️') };
-        App.sound.play('shield');
-      } else if (L.scam) {
-        shield = { ok: false, text: 'Запомни: ' + (L.shield || 'это ловушка') };
-      } else if (L.chapter === 'inbox' && g === 0) {
-        shield = { ok: false, text: 'Проверять — правильно! Но тут всё честно: тебя не торопят и ничего не просят 🙂' };
+    // промах → цель вернётся позже с другим эталоном
+    var rematches = S.rounds.filter(function (x) { return x.rematch; }).length;
+    if (pts < 40 && !r.rematch && rematches < 2) {
+      for (var j = S.idx + 2; j < S.rounds.length; j++) {
+        if (!S.rounds[j].boss && !S.rounds[j].rematch) {
+          var rm = App.content.rematch(S.content, r);
+          if (rm) S.rounds[j] = rm;
+          break;
+        }
       }
+    }
 
-      var key = L.scam ? (r.stars === 3 ? 'scamWin' : 'scamFail') : String(r.stars);
-      var rx = S.content.reactions;
-      var acc = L.answer === 0
-        ? (g === 0 ? 'Твой ответ: 0 — верно!' : 'Твой ответ: ' + valText(g, L) + ' · На деле: 0')
-        : 'Твой ответ: ' + valText(g, L) + ' · Точность ' + r.acc + '%';
-      openSheet({
-        stars: r.stars,
-        title: U.pick(rx[key] || rx[String(r.stars)] || ['']),
-        acc: acc,
-        shield: shield,
-        explain: L.explain,
-        retry: r.stars < 3
-      });
-      celebrate(r.stars, cols.p1);
+    var lines = ratioLines(r, g);
+    openSheet({
+      score: '+' + gained + (r.boss ? ' ×2' : ''),
+      band: band(pts),
+      rank: rankText(pts),
+      ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>У тебя: ' + esc(lines.guess) + '<br>' + esc(lines.miss),
+      fact: r.target.fact || r.ref.fact,
+      tip: tipFor(r, pts)
     });
+    celebrate(pts);
   }
 
   function duelResult() {
-    var a = cols.p1.value, b = cols.p2.value;
-    var e1 = errOf(L, a), e2 = errOf(L, b);
-    var w = Math.abs(e1 - e2) < 1e-9 ? 0 : e1 < e2 ? 1 : 2;
-    var chain = Promise.resolve();
-    if (L.answer === 0) {
-      if (a > 0) chain = chain.then(function () { return crumble(cols.p1); });
-      if (b > 0) chain = chain.then(function () { return crumble(cols.p2); });
-    }
-    chain.then(function () {
-      if (w) S.duelScore[w - 1]++;
-      S.duelMarks[S.idx] = w;
-      App.capy.mood(capyGame, 'happy');
-      var title = w === 0 ? 'Ничья! 🤝' : 'Игрок ' + w + ' ближе! 🏆';
-      openSheet({
-        stars: null,
-        title: title,
-        acc: 'Игрок 1: ' + valText(a, L) + ' · Игрок 2: ' + valText(b, L),
-        shield: L.scam ? { ok: true, text: 'Щит: ' + L.shield } : null,
-        explain: L.explain,
-        retry: false
-      });
-      App.fx.confetti(40);
+    var r = S.rounds[S.idx];
+    var g1 = B.getG(0), g2 = B.getG(1);
+    var p1 = points(g1), p2 = points(g2);
+    S.duelScore[0] += p1;
+    S.duelScore[1] += p2;
+    var e1 = Math.abs(Math.log(g1)), e2 = Math.abs(Math.log(g2));
+    var w = Math.abs(e1 - e2) < 1e-6 ? 0 : e1 < e2 ? 1 : 2;
+    S.duelMarks[S.idx] = w;
+    var lines = ratioLines(r, 1);
+    openSheet({
+      score: p1 + ' : ' + p2,
+      band: 3,
+      rank: w === 0 ? 'Ничья! 🤝' : 'Игрок ' + w + ' ближе! 🏆',
+      ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>Игрок 1: ' + esc(B.fmtVal(r.target, B.value(r.target, g1))) +
+        ' · Игрок 2: ' + esc(B.fmtVal(r.target, B.value(r.target, g2))),
+      fact: r.target.fact || r.ref.fact,
+      tip: tipFor(r, Math.max(p1, p2))
+    });
+    celebrate(Math.max(p1, p2));
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+  }
+
+  function celebrate(pts) {
+    var p = B.truthPoint();
+    if (pts >= 85) {
+      App.fx.confetti(pts === 100 ? 110 : 60);
+      App.fx.burst(p.x, p.y, ['⭐', '✨', '🔥', '💥'], pts === 100 ? 18 : 12);
       App.sound.play('win');
       App.bridge.vibrate();
-    });
+    } else if (pts >= 65) {
+      App.fx.burst(p.x, p.y, ['⭐', '✨'], 8);
+      App.sound.play('star', 1);
+    } else {
+      App.fx.burst(p.x, p.y, ['💨', '😵‍💫', '❓'], 6);
+      App.sound.play('soft');
+    }
+    if (!S.duel && S.combo >= 2) setTimeout(function () { App.sound.play('combo', S.combo); }, 300);
   }
 
   function openSheet(o) {
     S.phase = 'sheet';
-    var starsEl = $('res-stars');
-    starsEl.hidden = o.stars === null;
-    var is = starsEl.querySelectorAll('i');
-    for (var i = 0; i < 3; i++) is[i].className = '';
-    $('res-title').textContent = o.title;
-    $('res-acc').textContent = o.acc;
-    var sh = $('res-shield');
-    sh.hidden = !o.shield;
-    if (o.shield) { sh.textContent = o.shield.text; sh.className = 'res-shield' + (o.shield.ok ? '' : ' warn'); }
-    $('res-explain').textContent = o.explain;
-    $('btn-retry').hidden = !o.retry;
-    $('btn-next').textContent = S.idx + 1 < S.levels.length ? 'Дальше →' : 'Итоги 🏁';
-    // сначала ребёнок видит сравнение башен, потом выезжает объяснение
-    U.wait(1000).then(function () {
+    var sc = $('res-score');
+    sc.textContent = o.score;
+    sc.className = 'res-score s' + o.band + (S.duel ? ' duel' : '');
+    $('res-rank').textContent = o.rank;
+    $('res-ratio').innerHTML = o.ratio;
+    $('res-fact').textContent = o.fact;
+    $('res-tip').textContent = o.tip;
+    $('btn-next').textContent = S.idx + 1 < S.rounds.length ? 'Дальше →' : 'Итоги 🏁';
+    // сначала даём рассмотреть доску с ответом
+    U.wait(650).then(function () {
       $('sheet').hidden = false;
+      var inner = document.querySelector('.sheet-inner');
+      inner.scrollTop = 0;
+      restart(sc, 'res-score');
       updateHud();
-      if (o.stars) {
-        for (var k = 0; k < o.stars; k++) {
-          (function (k) {
-            setTimeout(function () { is[k].className = 'on'; App.sound.play('star', k); }, 250 + k * 200);
-          })(k);
-        }
-      }
     });
   }
 
@@ -509,81 +357,78 @@
     if (S.phase !== 'sheet') return;
     App.sound.play('swoosh');
     $('sheet').hidden = true;
-    if (S.idx + 1 < S.levels.length) loadLevel(S.idx + 1);
-    else if (S.mode === 'duel') endDuel();
+    if (S.idx + 1 < S.rounds.length) playRound(S.idx + 1);
+    else if (S.duel) endDuel();
     else endSolo();
-  });
-  $('btn-retry').addEventListener('click', function () {
-    if (S.phase !== 'sheet') return;
-    App.sound.play('tap');
-    loadLevel(S.idx);
   });
 
   // ---------- Итоги ----------
-  function starSquare(s) { return ['⬜', '🟧', '🟨', '🟩'][s || 0]; }
-  function titleFor(ratio) {
-    var t = S.content.titles[0];
-    S.content.titles.forEach(function (x) { if (ratio >= x.min) t = x; });
+  function titleFor(norm) {
+    var t = S.content.cfg.titles[0];
+    S.content.cfg.titles.forEach(function (x) { if (norm >= x.min) t = x; });
     return t;
   }
 
   function endSolo() {
     S.phase = 'end';
-    var sum = total();
-    var max = S.levels.length * 3;
-    var isRecord = S.runs > 0 && sum > S.record;
-    if (sum > S.record) S.record = sum;
-    S.levels.forEach(function (l) { S.seen[l.id] = true; });
-    var title = titleFor(sum / max);
-    var unlocks = S.content.unlocks;
-    var got = unlocks.filter(function (u) { return sum >= u.stars; }).map(function (u) { return u.id; });
-    got.forEach(function (id) { if (S.acc.indexOf(id) < 0) S.acc.push(id); });
+    var max = maxScore();
+    var norm = Math.round(S.score * 1000 / max);
+    var isRecord = S.runs > 0 && S.score > S.record;
+    S.record = Math.max(S.record, S.score);
+    S.runs++;
+    var title = titleFor(norm);
+    var unlocks = S.content.cfg.unlocks;
+    unlocks.forEach(function (u) { if (norm >= u.score && S.acc.indexOf(u.id) < 0) S.acc.push(u.id); });
 
-    $('end-stars').innerHTML = sum + ' ⭐<small> / ' + max + '</small>';
+    $('end-kicker').textContent = isRecord ? '🔥 Новый рекорд сессии!' : 'Итог';
+    $('end-score').innerHTML = S.score + '<small> / ' + max + '</small>';
     $('end-title').textContent = title.emoji + ' ' + title.name;
-    document.querySelector('#scr-end .end-kicker').textContent = isRecord ?'Новый рекорд сессии!' : 'Итог';
-    var capyEnd = $('capy-end');
     App.capy.mount(capyEnd, 'happy');
     App.capy.wear(capyEnd, S.acc);
-    $('end-grid').textContent = S.best.map(starSquare).join('');
+    var grid = S.results.map(function (x) { return square(x.pts); }).join('');
+    $('end-grid').textContent = grid;
+
+    var best = S.results.reduce(function (a, b) { return !a || b.pts > a.pts ? b : a; }, null);
+    $('end-best').innerHTML = '<h3>Лучшие моменты</h3><ul>' +
+      (best ? '<li>🎯 ' + esc(best.round.target.name) + ' vs ' + esc(best.round.ref.name) + ' — ' + best.pts + ' очков</li>' : '') +
+      (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') + '</ul>';
 
     $('end-unlocks').innerHTML = '<h3>Гардероб Капи</h3><ul>' + unlocks.map(function (u) {
       var open = S.acc.indexOf(u.id) >= 0;
-      return '<li class="' + (open ? 'new' : 'locked') + '">' + (open ? '✅ ' : '🔒 ') + u.label + (open ? '' : ' — нужно ' + u.stars + ' ⭐') + '</li>';
+      return '<li class="' + (open ? 'new' : 'locked') + '">' + (open ? '✅ ' : '🔒 ') + esc(u.label) +
+        (open ? '' : ' — нужно ' + Math.round(u.score * max / 1000) + ' очков') + '</li>';
     }).join('') + '</ul>';
 
-    var shp = $('end-shields');
-    shp.hidden = !S.shields.length;
-    shp.innerHTML = '<h3>Твои щиты от мошенников</h3><ul>' + S.shields.map(function (s) { return '<li>' + s + '</li>'; }).join('') + '</ul>';
+    var kinds = {};
+    S.rounds.forEach(function (r) { kinds[r.kind] = true; });
+    var L = S.content.cfg.lessons;
+    var lessons = [];
+    if (kinds.animals && L.animals) lessons.push('🐾 ' + L.animals);
+    if (kinds.countries && L.countries) lessons.push('🗺️ ' + L.countries);
+    if (kinds.countries && L.area) lessons.push('📐 ' + L.area);
+    $('end-lessons').innerHTML = '<h3>Что теперь знаешь</h3><ul>' + lessons.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
 
-    var seenCh = [];
-    S.levels.forEach(function (l) { if (seenCh.indexOf(l.chapter) < 0) seenCh.push(l.chapter); });
-    $('end-lessons').innerHTML = '<h3>Что теперь умеешь</h3><ul>' + seenCh.map(function (k) {
-      var c = S.content.chapters[k];
-      return '<li>' + c.icon + ' ' + c.lesson + '</li>';
-    }).join('') + '</ul>';
-
-    S.runs++;
     show('scr-end');
     $('scr-end').scrollTop = 0;
-    if (sum / max >= 0.5) App.fx.confetti(90);
+    if (norm >= 500) App.fx.confetti(100);
     App.sound.play('win');
     App.bridge.finish();
     App.bridge.completed();
-    S.last = { sum: sum, max: max, title: title };
+    S.last = { score: S.score, max: max, title: title, grid: grid };
   }
 
   function endDuel() {
     S.phase = 'end';
     var a = S.duelScore[0], b = S.duelScore[1];
     $('duel-score').innerHTML = '<span class="p1">' + a + '</span> : <span class="p2">' + b + '</span>';
-    $('duel-title').textContent = a > b ? '🏆 Победил Игрок 1!' : b > a ? '🏆 Победил Игрок 2!' : '🤝 Ничья — оба молодцы!';
+    $('duel-title').textContent = a > b ? '🏆 Победил Игрок 1!' : b > a ? '🏆 Победил Игрок 2!' : '🤝 Ничья — оба легенды!';
     var cd = $('capy-duel');
     App.capy.mount(cd, 'happy');
     App.capy.wear(cd, S.acc);
-    $('duel-grid').textContent = S.duelMarks.map(function (w) { return ['⚪', '🟢', '🟣'][w]; }).join('');
+    // кто был ближе в каждом раунде: 🤍 — Игрок 1, 🩷 — Игрок 2, ⚪ — ничья
+    $('duel-grid').textContent = S.duelMarks.map(function (w) { return ['⚪', '🤍', '🩷'][w]; }).join('');
     show('scr-duel-end');
-    App.fx.confetti(90);
+    App.fx.confetti(100);
     App.sound.play('win');
     App.bridge.finish();
   }
@@ -601,20 +446,19 @@
     var r = S.last;
     if (!r) return;
     App.sound.play('tap');
-    var grid = S.best.map(starSquare).join('');
-    var text = 'Мой результат в игре «Прикинь!» в СберKids: ' + r.sum + '⭐ из ' + r.max +
-      ' — «' + r.title.name + '» ' + grid + '\nСможешь прикинуть точнее? 😏';
+    var text = 'Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + ' — «' + r.title.name + '» ' + r.grid +
+      '\nСможешь прикинуть точнее? 😏';
     toast('Готовлю карточку…');
     App.share.card({
-      kicker: 'Мой результат', big: r.sum + ' ⭐ / ' + r.max, title: r.title.emoji + ' ' + r.title.name,
-      grid: grid, capy: { acc: S.acc, mood: 'happy' }, footer: 'Сможешь прикинуть точнее? 😏'
+      kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name,
+      grid: r.grid, capy: { acc: S.acc, mood: 'happy' }, footer: 'Сможешь прикинуть точнее? 😏'
     }).then(function (img) { App.bridge.share(text, img); });
   });
 
   $('btn-duel-share').addEventListener('click', function () {
     App.sound.play('tap');
     var a = S.duelScore[0], b = S.duelScore[1];
-    var grid = S.duelMarks.map(function (w) { return ['⚪', '🟢', '🟣'][w]; }).join('');
+    var grid = $('duel-grid').textContent;
     var text = 'Дуэль в «Прикинь!»: ' + a + ' : ' + b + ' ' + grid + '\nКто прикинет точнее? ⚔️';
     toast('Готовлю карточку…');
     App.share.card({
@@ -624,36 +468,45 @@
   });
 
   // ---------- Старт ----------
-  function startSolo() {
+  function startSolo(mode) {
     App.sound.play('tap');
-    S.mode = 'solo';
-    S.levels = App.content.pick(S.content, S.content.run, S.seen);
-    S.best = [];
+    S.duel = false;
+    S.turn = 1;
+    S.mode = mode || S.mode;
+    var cfg = S.content.cfg;
+    S.rounds = App.content.makeRun(S.content, S.mode, cfg.rounds, cfg.boss);
+    S.results = [];
+    S.score = 0;
+    S.combo = 0;
+    S.bestCombo = 0;
     show('scr-game');
-    loadLevel(0);
+    playRound(0);
   }
   function startDuel() {
     App.sound.play('tap');
-    S.mode = 'duel';
-    S.levels = App.content.pick(S.content, S.content.duel, S.seen);
+    S.duel = true;
+    S.rounds = App.content.makeRun(S.content, 'chaos', S.content.cfg.duelRounds, []);
     S.duelScore = [0, 0];
     S.duelMarks = [];
+    S.combo = 0;
     show('scr-game');
-    loadLevel(0);
+    playRound(0);
   }
   function toMenu() {
     App.sound.play('tap');
     S.phase = 'menu';
     var rec = $('record');
     rec.hidden = !S.record;
-    rec.textContent = 'Рекорд этой сессии: ' + S.record + ' ⭐';
+    rec.textContent = 'Рекорд этой сессии: ' + S.record;
     App.capy.wear($('capy-start'), S.acc.length ? S.acc : ['orange']);
     show('scr-start');
   }
 
-  $('btn-solo').addEventListener('click', startSolo);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
+    b.addEventListener('click', function () { startSolo(b.getAttribute('data-mode')); });
+  });
   $('btn-duel').addEventListener('click', startDuel);
-  $('btn-again').addEventListener('click', startSolo);
+  $('btn-again').addEventListener('click', function () { startSolo(); });
   $('btn-to-duel').addEventListener('click', startDuel);
   $('btn-rematch').addEventListener('click', startDuel);
   $('btn-menu').addEventListener('click', toMenu);
@@ -672,13 +525,13 @@
     b.addEventListener('click', function () { App.sound.toggle(); syncSound(); });
   });
 
-  // Капи на старте реагирует на тап — маленькая пасхалка
+  // Капи на старте отвечает на тап
   var LINES = [
-    'Привет! Я Капи. Прикинем?',
-    'Скейт = 50 пончиков. Прикинь!',
-    'Капибары не спешат. Мошенники — спешат 😌',
-    'Код из СМС? Никому. Даже мне.',
-    'Тяни башню — и смотри, кто точнее!'
+    'Йо! Я Капи. Сколько капибар в ките? 🤔',
+    'Велоцираптор был размером с индюка. Прикинь!',
+    'Гренландия на карте врёт. Проверим? 🗺️',
+    'Страус выше баскетболиста 🏀',
+    'Я — 1,2 метра чистого вайба 🍊'
   ];
   var lineIdx = 0;
   $('capy-start').addEventListener('click', function (e) {
@@ -687,27 +540,35 @@
     b.textContent = LINES[lineIdx];
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
     App.capy.mood($('capy-start'), 'happy');
-    App.fx.burst(e.clientX, e.clientY, ['🍊', '✨', '🪙'], 8, 24);
-    App.sound.play('tap');
+    App.fx.burst(e.clientX, e.clientY, ['🍊', '✨', '💥'], 10, 26);
+    App.sound.play('boom');
     App.bridge.vibrate();
   });
 
-  window.addEventListener('resize', function () { if (S.phase !== 'menu' && S.phase !== 'end') measure(); });
+  function loadContent() {
+    $('load-error').hidden = true;
+    App.content.load().then(function (c) {
+      S.content = c;
+      var a = c.pools.animals.length >= 4, k = c.pools.countries.length >= 4;
+      document.querySelector('[data-mode="animals"]').disabled = !a;
+      document.querySelector('[data-mode="countries"]').disabled = !k;
+      document.querySelector('[data-mode="chaos"]').disabled = !(a || k);
+      $('btn-duel').disabled = !(a || k);
+      $('load-error').hidden = a || k;
+    });
+  }
+  $('btn-reload').addEventListener('click', loadContent);
 
   function init() {
     var logo = document.querySelector('.logo');
     logo.innerHTML = 'ПРИКИНЬ!'.split('').map(function (ch, i) {
-      return '<span style="animation-delay:' + (i * 0.12) + 's">' + ch + '</span>';
+      return '<span style="animation-delay:' + (i * 0.09) + 's">' + ch + '</span>';
     }).join('');
     App.capy.mount($('capy-start'), 'idle');
     App.capy.wear($('capy-start'), ['orange']);
-    App.capy.mount(capyGame, 'idle');
+    B.init($('board'), onBoardChange);
     syncSound();
-    $('btn-solo').disabled = $('btn-duel').disabled = true;
-    App.content.load().then(function (c) {
-      S.content = c;
-      $('btn-solo').disabled = $('btn-duel').disabled = false;
-    });
+    loadContent();
   }
   init();
 })();

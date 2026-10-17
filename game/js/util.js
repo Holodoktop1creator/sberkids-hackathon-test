@@ -38,5 +38,37 @@
     return null;
   }
 
-  App.util = { fmt: fmt, plural: plural, clamp: clamp, rand: rand, pick: pick, shuffle: shuffle, easeOut: easeOut, wait: wait, store: store };
+  // 1,6 — десятичная запятая, без лишних нулей
+  function dec(n, digits) {
+    var s = n.toFixed(digits);
+    if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '').replace(/\.$/, '');
+    return s.replace('.', ',');
+  }
+
+  function fmtLen(m) {
+    if (m < 0.1) return dec(m * 100, 1) + ' см';
+    if (m < 1) return Math.round(m * 100) + ' см';
+    if (m < 10) return dec(m, 1) + ' м';
+    return fmt(m) + ' м';
+  }
+
+  function fmtArea(km2) {
+    if (km2 >= 1e6) return dec(km2 / 1e6, km2 >= 1e7 ? 1 : 2) + ' млн км²';
+    if (km2 >= 1e3) return fmt(km2 / 1e3) + ' тыс. км²';
+    return fmt(km2) + ' км²';
+  }
+
+  function fmtKm(km) {
+    return km >= 1 ? fmt(km) + ' км' : Math.round(km * 1000) + ' м';
+  }
+
+  // во сколько раз: 1,6 · 14 · 2,5
+  function fmtRatio(r) {
+    return r >= 10 ? fmt(r) : dec(r, 1);
+  }
+
+  App.util = {
+    fmt: fmt, plural: plural, clamp: clamp, rand: rand, pick: pick, shuffle: shuffle, easeOut: easeOut,
+    wait: wait, store: store, dec: dec, fmtLen: fmtLen, fmtArea: fmtArea, fmtKm: fmtKm, fmtRatio: fmtRatio
+  };
 })();
