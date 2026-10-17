@@ -100,6 +100,16 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @keyframes letter { 0%, 100% { transform: translateY(0) rotate(0); } 25% { transform: translateY(-8px) rotate(-6deg) scale(1.08); } 50% { transform: translateY(0) rotate(4deg); } }
 .tagline { margin: 12px 0 0; color: var(--muted); font-size: 16px; line-height: 1.35; font-weight: 700; }
 .tagline b { color: var(--lime); }
+/* Баннер события из расписания в game.json */
+.event {
+  display: inline-flex; flex-direction: column; gap: 1px; margin-top: 10px; padding: 7px 14px;
+  background: var(--orange); color: var(--ink); border: 3px solid var(--ink); border-radius: 14px;
+  box-shadow: 0 4px 0 var(--ink); transform: rotate(-2deg); animation: eventIn .5s .3s both cubic-bezier(.2, 1.6, .4, 1);
+}
+.event b { font-size: 17px; font-weight: 900; }
+.event span { font-size: 13px; font-weight: 700; }
+.event span:empty { display: none; }
+@keyframes eventIn { from { transform: rotate(-12deg) scale(1.8); opacity: 0; } }
 
 .start-hero { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 150px; }
 .capy-hero { width: min(40vw, 170px); cursor: pointer; }
@@ -172,10 +182,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .board {
   position: relative; flex: 1; min-height: 220px; margin: 8px 0 6px;
   border: 3px solid var(--ink); border-radius: 22px; overflow: hidden;
-  background: var(--gold); box-shadow: 0 6px 0 var(--ink);
+  background: var(--board-a, var(--gold)); box-shadow: 0 6px 0 var(--ink);
   touch-action: none;
 }
-.board.is-country { background: var(--sky); }
+.board.is-country { background: var(--board-c, var(--sky)); }
 .board.boss { box-shadow: 0 6px 0 var(--ink), 0 0 0 4px var(--gold), 0 0 30px rgba(255, 207, 61, .7); animation: bossGlow 1s ease-in-out infinite; }
 @keyframes bossGlow { 50% { box-shadow: 0 6px 0 var(--ink), 0 0 0 4px var(--pink), 0 0 40px rgba(255, 92, 168, .8); } }
 .bgrid {

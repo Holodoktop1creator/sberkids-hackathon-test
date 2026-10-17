@@ -1,0 +1,39 @@
+{
+  "_help": "Файл контент-менеджера. Новый зверь: картинка PNG или SVG с прозрачным фоном в папку img/ и одна запись ниже. image — путь относительно папки content или https-ссылка на CDN. size — размер в метрах, dim — long (в длину), tail (в длину с хвостом) или tall (в высоту). Новая страна: image + area (площадь в км²) — площадь силуэта игра посчитает сама. Запись с таким же id, как в animals.json или countries.json, заменяет её. hidden — id, которые временно убрать из игры. Проверить всё перед выкладкой: tools/content.html.",
+  "animals": [
+    {
+      "id": "brachiosaurus",
+      "name": "Брахиозавр",
+      "size": 22,
+      "dim": "long",
+      "image": "img/brachiosaurus.svg",
+      "fact": "Мог поднять голову на высоту четырёхэтажного дома."
+    },
+    {
+      "id": "triceratops",
+      "name": "Трицератопс",
+      "size": 9,
+      "dim": "long",
+      "image": "img/triceratops.svg",
+      "fact": "Одна только голова с костяным воротником была длиной почти 2,5 метра."
+    },
+    {
+      "id": "stegosaurus",
+      "name": "Стегозавр",
+      "size": 9,
+      "dim": "long",
+      "image": "img/stegosaurus.svg",
+      "fact": "Длиной с автобус, а мозг у него был размером с лимон."
+    },
+    {
+      "id": "mammoth",
+      "name": "Шерстистый мамонт",
+      "size": 3.3,
+      "dim": "tall",
+      "image": "img/mammoth.svg",
+      "fact": "Бивни мамонта вырастали до 4 метров."
+    }
+  ],
+  "countries": [],
+  "hidden": []
+}

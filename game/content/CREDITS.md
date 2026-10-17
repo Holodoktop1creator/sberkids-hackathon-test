@@ -40,3 +40,10 @@
 - Колибри (*Archilochus colubris*) — PhyloPic `9348ef0e-0b67-46de-b77e-298ad929ff4f`, CC0, автор: Andy Wilson
 - Мышь (*Mus musculus*) — PhyloPic `11ccace5-9ad4-409b-97fe-9320058280c7`, CC0, автор: Matthew Schmitz
 - Пчела (*Apis mellifera*) — PhyloPic `f551f54e-1e17-4b0e-985c-74d34a53cb63`, CC0, автор: Lubna Maherally
+
+Силуэты-файлы в `img/` (добавлены как обычные картинки, без скрипта сборки; PhyloPic, CC0):
+
+- Трицератопс (*Triceratops horridus*) — PhyloPic `0bb6e6b8-a60b-404d-8285-f29c67086fb0`, CC0, файл `img/triceratops.svg`
+- Стегозавр (*Stegosaurus stenops*) — PhyloPic `429d71d8-2940-449b-838b-a5b7f1733eba`, CC0, файл `img/stegosaurus.svg`
+- Брахиозавр (*Brachiosaurus altithorax*) — PhyloPic `2431b273-7b21-482e-b971-70377686335d`, CC0, файл `img/brachiosaurus.svg`
+- Шерстистый мамонт (*Mammuthus primigenius*) — PhyloPic `e9ea8595-730d-47cc-b0d0-78d186d91bcd`, CC0, файл `img/mammoth.svg`

@@ -241,6 +241,11 @@
     kick();
   }
 
+  // Векторный силуэт красится стилями, картинка-файл — заранее перекрашенными слоями
+  function shapeOf(item, which) {
+    return item.layers ? App.assets.layer(item, which) : item.markup;
+  }
+
   function setRound(round, opts) {
     setDemo(false);
     R = round;
@@ -250,10 +255,10 @@
     st.truth = false;
     st.active = 0;
     wob.x = wob.v = 0;
-    L.ref.shape.innerHTML = R.ref.markup;
-    L.g1.shape.innerHTML = R.target.markup;
-    L.g2.shape.innerHTML = R.target.markup;
-    L.truth.shape.innerHTML = R.target.markup;
+    L.ref.shape.innerHTML = shapeOf(R.ref, 'ref');
+    L.g1.shape.innerHTML = shapeOf(R.target, 'g1');
+    L.g2.shape.innerHTML = shapeOf(R.target, 'g2');
+    L.truth.shape.innerHTML = shapeOf(R.target, 'truth');
     L.truth.wrap.classList.remove('slam');
     el.classList.toggle('is-country', R.kind === 'countries');
     var rowFit = geom('row', 1.3).fit, colFit = geom('col', 1.3).fit;

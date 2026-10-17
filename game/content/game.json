@@ -4,6 +4,53 @@
   "boss": [4, 8],
   "duelRounds": 5,
   "timer": 20,
+  "modes": { "chaos": true, "animals": true, "countries": true, "duel": true },
+  "theme": { "animals": "#ffcf3d", "countries": "#63e6ff" },
+  "texts": {
+    "tagline": "Звери и страны. Растяни силуэт\nдо **настоящего** размера!",
+    "capy": [
+      "Йо! Я Капи. Сколько капибар в ките? 🤔",
+      "Велоцираптор был размером с индюка. Прикинь!",
+      "Гренландия на карте врёт. Проверим? 🗺️",
+      "Страус выше баскетболиста 🏀",
+      "Я — 1,2 метра чистого вайба 🍊"
+    ],
+    "share": "Сможешь прикинуть точнее? 😏",
+    "ask": { "long": "сколько в длину?", "tail": "сколько в длину с хвостом?", "tall": "сколько в высоту?", "area": "какая площадь?" }
+  },
+  "events": [
+    {
+      "id": "giants",
+      "from": "2026-10-15",
+      "to": "2026-10-31",
+      "title": "🦖 Неделя древних гигантов",
+      "text": "Динозавры и мамонты — в босс-раундах!",
+      "theme": { "animals": "#ff9a1f" },
+      "capy": ["crown"],
+      "traps": {
+        "animals": [
+          ["brachiosaurus", "giraffe"],
+          ["triceratops", "elephant"],
+          ["stegosaurus", "rhino"],
+          ["mammoth", "elephant"],
+          ["trex", "brachiosaurus"],
+          ["raptor", "human"]
+        ]
+      }
+    },
+    {
+      "id": "winter",
+      "from": "2026-12-20",
+      "to": "2027-01-10",
+      "title": "❄️ Зимний масштаб",
+      "text": "Белые медведи, пингвины и самые холодные края",
+      "theme": { "animals": "#bfe9ff", "countries": "#d9f1ff" },
+      "traps": {
+        "animals": [["polar_bear", "human"], ["penguin", "human"], ["moose", "horse"]],
+        "countries": [["antarctica", "australia"], ["greenland", "africa"], ["iceland", "cuba"], ["finland", "italy"]]
+      }
+    }
+  ],
   "ratio": {
     "animals": [1.2, 15],
     "countries": [1.3, 40]

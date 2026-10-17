@@ -154,9 +154,11 @@
   }
 
   // ---------- Раунд ----------
+  var ASK = { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', area: 'какая площадь?' };
   function askText(r) {
-    if (r.kind === 'countries') return 'какая площадь?';
-    return r.target.dim === 'tall' ? 'сколько в высоту?' : r.target.dim === 'tail' ? 'сколько в длину с хвостом?' : 'сколько в длину?';
+    var ask = S.content.cfg.texts.ask || {};
+    var key = r.kind === 'countries' ? 'area' : r.target.dim;
+    return typeof ask[key] === 'string' && ask[key] ? ask[key] : ASK[key];
   }
   function kickerText(r, i) {
     if (r.boss) return '⚡ БОСС-РАУНД · очки ×2';
@@ -579,9 +581,9 @@
     var r = S.last;
     if (!r) return;
     doShare('Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + ' — «' + r.title.name + '» ' + r.grid +
-      '\nСможешь прикинуть точнее? 😏', {
+      '\n' + S.content.cfg.texts.share, {
       kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name,
-      grid: r.grid, capy: { acc: S.acc, mood: 'happy' }, footer: 'Сможешь прикинуть точнее? 😏'
+      grid: r.grid, capy: { acc: S.acc, mood: 'happy' }, footer: S.content.cfg.texts.share
     });
   });
 
@@ -631,7 +633,7 @@
     var rec = $('record');
     rec.hidden = !S.record;
     rec.textContent = 'Рекорд этой сессии: ' + S.record;
-    App.capy.wear($('capy-start'), S.acc.length ? S.acc : ['orange']);
+    App.capy.wear($('capy-start'), capyAcc());
     show('scr-start');
   }
 
@@ -666,14 +668,8 @@
     b.addEventListener('click', function () { App.sound.toggle(); syncSound(); });
   });
 
-  // Капи на старте отвечает на тап
-  var LINES = [
-    'Йо! Я Капи. Сколько капибар в ките? 🤔',
-    'Велоцираптор был размером с индюка. Прикинь!',
-    'Гренландия на карте врёт. Проверим? 🗺️',
-    'Страус выше баскетболиста 🏀',
-    'Я — 1,2 метра чистого вайба 🍊'
-  ];
+  // Капи на старте отвечает на тап; реплики берутся из game.json → texts.capy
+  var LINES = ['Йо! Я Капи. Сколько капибар в ките? 🤔'];
   var lineIdx = 0;
   $('capy-start').addEventListener('click', function (e) {
     lineIdx = (lineIdx + 1) % LINES.length;
@@ -697,7 +693,49 @@
       $('btn-duel').disabled = !(a || k);
       $('load-error').hidden = a || k;
       TM.el.hidden = !c.cfg.timer;
+      applyLook(c);
     });
+  }
+
+  // Наряд Капи на старте: открытые в сессии вещи + то, что задаёт событие
+  function capyAcc() {
+    var ev = S.content && S.content.event;
+    var acc = S.acc.length ? S.acc.slice() : ['orange'];
+    if (ev && Array.isArray(ev.capy)) ev.capy.forEach(function (x) { if (acc.indexOf(x) < 0) acc.push(x); });
+    return acc;
+  }
+
+  // Всё, что меняется из game.json без релиза: цвета, тексты, режимы, событие по датам
+  function applyLook(c) {
+    var cfg = c.cfg, ev = c.event;
+    var theme = { animals: cfg.theme.animals, countries: cfg.theme.countries };
+    if (ev && ev.theme) {
+      ['animals', 'countries'].forEach(function (k) {
+        if (/^#[0-9a-f]{3,8}$/i.test(ev.theme[k] || '')) theme[k] = ev.theme[k];
+      });
+    }
+    document.documentElement.style.setProperty('--board-a', theme.animals);
+    document.documentElement.style.setProperty('--board-c', theme.countries);
+    $('tagline').innerHTML = App.content.rich(cfg.texts.tagline);
+    var lines = Array.isArray(cfg.texts.capy) ? cfg.texts.capy.filter(function (x) { return typeof x === 'string' && x; }) : [];
+    if (lines.length) {
+      LINES = lines;
+      lineIdx = 0;
+      $('hero-bubble').textContent = LINES[0];
+    }
+    var evEl = $('event');
+    evEl.hidden = !ev;
+    if (ev) {
+      evEl.querySelector('b').textContent = ev.title;
+      evEl.querySelector('span').textContent = ev.text || '';
+    }
+    var m = cfg.modes;
+    document.querySelector('[data-mode="chaos"]').hidden = !m.chaos;
+    document.querySelector('[data-mode="animals"]').hidden = !m.animals;
+    document.querySelector('[data-mode="countries"]').hidden = !m.countries;
+    $('btn-duel').hidden = !m.duel;
+    $('btn-to-duel').hidden = !m.duel;
+    App.capy.wear($('capy-start'), capyAcc());
   }
   $('btn-reload').addEventListener('click', loadContent);
 
