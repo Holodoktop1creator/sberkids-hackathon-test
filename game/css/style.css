@@ -49,7 +49,7 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* песочница и приложение рисуют свои кнопки поверх WebView: справа сверху и полосу снизу */
   --host-right: 92px;
-  --host-bottom: 64px;
+  --host-bottom: 80px;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
