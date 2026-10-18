@@ -755,7 +755,18 @@
       return false;
     }
     var big = Math.round(Math.min(150, hero.clientWidth * 0.38));
-    if (!(tryMode('col', big, 104) || tryMode('row', 120, 72) || tryMode('solo', 120, 56))) scr.setAttribute('data-hero', 'off');
+    function place(solo) { return tryMode('col', big, 104) || tryMode('row', 120, 72) || (solo && tryMode('solo', 120, 48)); }
+    // Капи важнее баннера события: если ей не хватает места, баннер сначала теряет
+    // вторую строку, потом прячется, потом ужимаются подзаголовок и плитки — Капи не пропадает со старта
+    var steps = ['ev-short', 'ev-off', 'compact'];
+    steps.forEach(function (c) { scr.classList.remove(c); });
+    if (place(false)) return;
+    for (var i = 0; i < steps.length; i++) {
+      if (i < 2 && $('event').hidden) continue;
+      scr.classList.add(steps[i]);
+      if (place(i === steps.length - 1)) return;
+    }
+    scr.setAttribute('data-hero', 'off');
   }
   // Реплики Капи разной длины: высоту берём под самую длинную — тап по Капи не двигает экран
   function roomForLines(bub) {
