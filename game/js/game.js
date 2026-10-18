@@ -767,6 +767,16 @@
   }
   window.addEventListener('resize', fitStart);
 
+  // Видимая высота экрана: в песочнице WebView бывает выше видимой части, и всё,
+  // что прижато к низу, уезжает. Разбор раунда берёт высоту отсюда.
+  function syncHeight() {
+    var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-h', Math.round(Math.min(h, window.innerHeight)) + 'px');
+  }
+  syncHeight();
+  window.addEventListener('resize', syncHeight);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', syncHeight);
+
   Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
     b.addEventListener('click', function () { startSolo(b.getAttribute('data-mode')); });
   });
