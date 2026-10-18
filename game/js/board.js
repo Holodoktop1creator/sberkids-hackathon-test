@@ -88,21 +88,22 @@
   function geom(m, dg, s) {
     var ax0 = PAD, ay0 = TOP + LABEL, aw = W - PAD * 2, ah = H - BOTTOM - ay0, ay1 = H - BOTTOM;
     var r = R.ref, t = R.target, country = R.kind === 'countries';
+    var twd = t.stretch ? t.w : t.w * dg; // стопку тянем только в высоту
     var o = { m: m };
     if (m === 'row') {
-      o.fit = Math.min((aw - GAP) / (r.w + t.w * dg), ah / Math.max(r.h, t.h * dg));
+      o.fit = Math.min((aw - GAP) / (r.w + twd), ah / Math.max(r.h, t.h * dg));
       if (s === undefined) s = o.fit;
-      var total = (r.w + t.w * dg) * s + GAP;
+      var total = (r.w + twd) * s + GAP;
       var x = ax0 + (aw - total) / 2;
       var cy = (ay0 + ay1) / 2;
       o.ref = country ? { cx: x + r.w * s / 2, cy: cy } : { left: x, bottom: ay1 };
       var left = x + r.w * s + GAP;
-      o.anchor = country ? { cx: left + t.w * dg * s / 2, cy: cy } : { left: left, bottom: ay1 };
+      o.anchor = country ? { cx: left + twd * s / 2, cy: cy } : { left: left, bottom: ay1 };
       o.grounds = country ? [] : [ay1];
     } else {
-      o.fit = Math.min(aw / Math.max(r.w, t.w * dg), (ah - GAP - LABEL) / (r.h + t.h * dg));
+      o.fit = Math.min(aw / Math.max(r.w, twd), (ah - GAP - LABEL) / (r.h + t.h * dg));
       if (s === undefined) s = o.fit;
-      var bw = Math.max(r.w, t.w * dg) * s;
+      var bw = Math.max(r.w, twd) * s;
       var lx = ax0 + (aw - bw) / 2;
       var refBottom = ay0 + r.h * s;
       if (country) {
@@ -121,16 +122,16 @@
   }
 
   function box(item, pos, f, s) {
-    var w = item.w * f * s, h = item.h * f * s;
+    var w = item.w * (item.stretch ? 1 : f) * s, h = item.h * f * s;
     var x = pos.left !== undefined ? pos.left : pos.cx - w / 2;
     var y = pos.bottom !== undefined ? pos.bottom - h : pos.cy - h / 2;
     return { x: x, y: y, w: w, h: h };
   }
 
   function place(layer, item, b) {
-    var k = b.w / item.vb[2];
+    var kx = b.w / item.vb[2], ky = b.h / item.vb[3];
     layer.shape.setAttribute('transform',
-      'translate(' + b.x.toFixed(2) + ' ' + b.y.toFixed(2) + ') scale(' + k.toPrecision(5) + ') translate(' + (-item.vb[0]) + ' ' + (-item.vb[1]) + ')');
+      'translate(' + b.x.toFixed(2) + ' ' + b.y.toFixed(2) + ') scale(' + kx.toPrecision(5) + ' ' + ky.toPrecision(5) + ') translate(' + (-item.vb[0]) + ' ' + (-item.vb[1]) + ')');
   }
 
   // размер с учётом демо-покачивания

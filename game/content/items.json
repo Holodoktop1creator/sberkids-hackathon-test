@@ -132,6 +132,30 @@
       "dim": "tall",
       "image": "img/scoin.svg",
       "fact": "100 монет по 10 ₽ весят больше полкило."
+    },
+    {
+      "id": "phone",
+      "name": "Смартфон",
+      "size": 0.15,
+      "dim": "tall",
+      "image": "img/phone.svg",
+      "fact": "Обычный смартфон — около 15 см в высоту."
+    },
+    {
+      "id": "laptop",
+      "name": "Ноутбук",
+      "size": 0.215,
+      "dim": "tall",
+      "image": "img/laptop.svg",
+      "fact": "Открытый ноутбук — около 21 см в высоту."
+    },
+    {
+      "id": "headphones",
+      "name": "Наушники",
+      "size": 0.2,
+      "dim": "tall",
+      "image": "img/hph.svg",
+      "fact": "Большие наушники — около 20 см в высоту."
     }
   ]
 }

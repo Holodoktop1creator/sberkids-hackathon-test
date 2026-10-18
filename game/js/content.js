@@ -194,6 +194,7 @@
         };
         checkTraps(content);
         content.claims = buildClaims(res[4], content);
+        content.tasks = buildTasks(res[4], content);
         return content;
       });
     });
@@ -285,6 +286,59 @@
     return makeClaim(t, r, says, 'rumor', text, '');
   }
 
+  // ---------- «Цена в купюрах» ----------
+  // Чем платим: номинал, толщина одной купюры или монеты (м), ширина (мм), как назвать
+  var PAY = {
+    note100: { rub: 100, t: 0.0001, w: 150, of: 'сторублёвок', forms: ['купюра', 'купюры', 'купюр'] },
+    note1000: { rub: 1000, t: 0.0001, w: 157, of: 'тысячных купюр', forms: ['купюра', 'купюры', 'купюр'] },
+    note5000: { rub: 5000, t: 0.0001, w: 157, of: 'пятитысячных купюр', forms: ['купюра', 'купюры', 'купюр'] },
+    coin10: { rub: 10, t: 0.0022, w: 22, of: 'десятирублёвых монет', forms: ['монета', 'монеты', 'монет'] },
+    coin1: { rub: 1, t: 0.0015, w: 20.5, of: 'рублёвых монет', forms: ['монета', 'монеты', 'монет'] }
+  };
+
+  // Стопка строится сама под любую цену: прямоугольник с «листами»
+  function stackItem(key, count) {
+    var pay = PAY[key];
+    var h = count * pay.t;
+    var W = pay.w, H = h * 1000;
+    var n = Math.min(40, count - 1), step = H / (n + 1), th = step * 0.22;
+    var d = 'M0 0H' + W + 'V' + H.toFixed(3) + 'H0Z';
+    for (var i = 1; i <= n; i++) {
+      var y = (step * i).toFixed(3);
+      d += 'M2 ' + y + 'H' + (W - 2) + 'v' + th.toFixed(3) + 'H2Z';
+    }
+    return {
+      kind: 'animal', id: 'stack-' + key + '-' + count, name: 'Стопка ' + pay.of, fact: '', value: h,
+      dim: 'tall', dimText: 'в высоту', axis: 'h', vb: [0, 0, W, H], markup: '<path d="' + d + '" fill-rule="evenodd"/>',
+      w: W / 1000, h: h, ready: true, stretch: true
+    };
+  }
+
+  function buildTasks(raw, content) {
+    var out = [];
+    if (!raw || !Array.isArray(raw.prices)) return out;
+    raw.prices.forEach(function (p, i) {
+      var item = p && byId(content.pools.money, p.item);
+      var pay = p && PAY[p.pay];
+      var count = pay && isNum(p.price) ? Math.round(p.price / pay.rub) : 0;
+      if (!item || !pay || count < 1 || count > 100000) {
+        content.errors.push('Задача «цена в купюрах» №' + (i + 1) + ' с ошибкой: нужны вещь, цена и чем платим');
+        return;
+      }
+      var stack = stackItem(p.pay, count);
+      var t = pay.t * 1000;
+      out.push({
+        uid: 'p' + i, task: true, isTrue: null, target: stack, ref: item, source: '💰 Цена в купюрах',
+        ask: 'какой высоты стопка?',
+        text: isStr(p.text) ? p.text : item.name + (/[иы]$/.test(item.name) ? ' стоят ' : ' стоит ') + U.fmt(p.price) + ' ₽. Какой высоты будет стопка ' + pay.of + '?',
+        why: U.fmt(p.price) + ' ₽ ÷ ' + U.fmt(pay.rub) + ' ₽ = ' + U.fmt(count) + ' ' + U.plural(count, pay.forms) + '. ' +
+          (pay.t > 0.0005 ? 'Одна монета толщиной ' + U.dec(t, 1) + ' мм' : 'Одна купюра — около 0,1 мм') +
+          ', значит стопка — ' + U.fmtLen(stack.value) + '.' + (isStr(p.why) ? ' ' + p.why : '')
+      });
+    });
+    return out;
+  }
+
   // Случайная пара, где цель больше или меньше эталона в разумное число раз
   function randomPair(pool, range, usedTargets, target) {
     var lo = range[0], hi = range[1];
@@ -335,6 +389,16 @@
       var p = null;
       // во время события босс-раунд берёт пару из события
       if (isBoss && eventBoss) p = trapPair(content, kind, used, true);
+      // «цена в купюрах»: в денежной теме — примерно каждый второй раунд
+      var tasks = (content.tasks || []).filter(function (t) { return !usedClaims[t.uid]; });
+      if (!p && kind === 'money' && !isBoss && tasks.length && Math.random() < 0.5) {
+        var tk = U.pick(tasks);
+        usedClaims[tk.uid] = true;
+        var claim = {};
+        Object.keys(tk).forEach(function (k) { claim[k] = tk[k]; });
+        claim.g0 = Math.random() < 0.5 ? U.rand(0.3, 0.6) : U.rand(1.8, 3.2);
+        p = { target: tk.target, ref: tk.ref, claim: claim };
+      }
       // готовые заявления из claims.json; на босс-раунде — только фейки
       if (!p) {
         var pool = (claims[kind] || []).filter(function (c) {
@@ -378,5 +442,5 @@
       .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
   }
 
-  App.content = { load: load, makeRun: makeRun, rematch: rematch, rich: rich, DIM: DIM, SOURCES: SOURCES, DRAFT_KEY: DRAFT_KEY };
+  App.content = { load: load, makeRun: makeRun, rematch: rematch, rich: rich, DIM: DIM, SOURCES: SOURCES, DRAFT_KEY: DRAFT_KEY, PAY: PAY };
 })();

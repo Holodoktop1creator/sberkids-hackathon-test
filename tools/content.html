@@ -82,6 +82,7 @@
       <button data-tab="animals">🐾 Звери</button>
       <button data-tab="countries">🗺️ Страны</button>
       <button data-tab="money">💰 Деньги</button>
+      <button data-tab="prices">💰 Цены в купюрах</button>
       <button data-tab="texts">✍️ Тексты и события</button>
       <button data-tab="new">➕ Новая картинка</button>
     </div>
@@ -140,6 +141,7 @@
     if (!d.items.edits || typeof d.items.edits !== 'object') d.items.edits = {};
     d.claims = d.claims || {};
     if (!Array.isArray(d.claims.claims)) d.claims.claims = [];
+    if (!Array.isArray(d.claims.prices)) d.claims.prices = [];
     if (!d.claims.sources) d.claims.sources = clone(App.content.SOURCES);
     d.game = d.game || {};
     d.game.texts = d.game.texts || {};
@@ -211,6 +213,7 @@
       : '<p class="ok">✅ Ошибок нет — всё загрузится в игре</p>') +
       '<div class="facts"><span>🐾 Зверей: <b>' + C.pools.animals.length + '</b></span><span>🌍 Стран: <b>' + C.pools.countries.length + '</b></span>' +
       '<span>💰 Денег: <b>' + C.pools.money.length + '</b></span><span>🕵️ Заявлений: <b>' + all.length + '</b> (правды ' + truths + ')</span>' +
+      '<span>💰 Цен в купюрах: <b>' + (C.tasks || []).length + '</b></span>' +
       '<span>Раундов: <b>' + cfg.rounds + '</b></span></div>' +
       '<p>' + (ev ? 'Событие на эту дату: <span class="event-badge">' + esc(ev.title) + '</span> ' + esc(ev.text || '') : '<span class="muted">На эту дату событий нет.</span>') + '</p>';
   }
@@ -220,6 +223,7 @@
     $('new-box').hidden = tab !== 'new';
     if (tab === 'claims') return renderClaims();
     if (tab === 'texts') return renderTexts();
+    if (tab === 'prices') return renderPrices();
     if (tab === 'new') { $('panel').innerHTML = ''; return updatePreview(); }
     renderObjects(tab);
   }
@@ -256,6 +260,32 @@
         }).join('') + '</select></label></div>' +
         '<label>Почему фейк / правда<textarea data-c="why">' + esc(c.why) + '</textarea></label>' +
         '<button class="btn small warn" data-act="cdel">🗑 Удалить заявление</button></div>';
+    }).join('');
+    $('panel').innerHTML = html + '</div>';
+  }
+
+  // «Цена в купюрах»: вещь, цена, чем платим — стопку игра строит сама
+  function renderPrices() {
+    var PAY = App.content.PAY;
+    var html = '<div class="toolbar"><button class="btn go" data-act="padd">➕ Новая задача</button>' +
+      '<span class="muted">Вещь из вкладки «Деньги», цена в рублях и чем платим. Игра посчитает, сколько купюр или монет нужно, и построит стопку. Текст задания можно не писать — он соберётся сам.</span></div><div class="grid">';
+    html += D.claims.prices.map(function (p, i) {
+      var t = null;
+      (C.tasks || []).forEach(function (x) { if (x.uid === 'p' + i) t = x; });
+      var head = t ? '<div class="verdict true">→ ' + esc(t.why.split('. ')[0]) + ' · стопка ' + U.fmtLen(t.target.value) + '</div>' +
+          '<svg viewBox="0 0 200 110">' + scene([t.ref, t.target], 200, 110) + '</svg>'
+        : '<div class="verdict err">⚠️ Ошибка: выберите вещь, цену больше нуля и чем платим</div>';
+      return '<div class="card' + (t ? '' : ' bad') + '" data-p="' + i + '">' + head +
+        '<div class="row"><label>Вещь<select data-pf="item">' + C.pools.money.map(function (it) {
+          return '<option value="' + esc(it.id) + '"' + (it.id === p.item ? ' selected' : '') + '>' + esc(it.name) + '</option>';
+        }).join('') + '</select></label>' +
+        '<label>Цена, ₽<input data-pf="price" type="number" step="any" value="' + esc(p.price) + '"></label></div>' +
+        '<label>Чем платим<select data-pf="pay">' + Object.keys(PAY).map(function (k) {
+          return '<option value="' + k + '"' + (k === p.pay ? ' selected' : '') + '>' + PAY[k].rub + ' ₽ — ' + esc(PAY[k].of) + '</option>';
+        }).join('') + '</select></label>' +
+        '<label>Текст задания (необязательно)<textarea data-pf="text" placeholder="' + esc(t ? t.text : '') + '">' + esc(p.text || '') + '</textarea></label>' +
+        '<label>Вывод после ответа (необязательно)<textarea data-pf="why">' + esc(p.why || '') + '</textarea></label>' +
+        '<button class="btn small warn" data-act="pdel">🗑 Удалить задачу</button></div>';
     }).join('');
     $('panel').innerHTML = html + '</div>';
   }
@@ -360,6 +390,12 @@
       D.claims.claims[+card.getAttribute('data-i')][f] = f === 'says' ? num(t.value) : t.value;
     } else if (t.hasAttribute('data-t')) setPath(t.getAttribute('data-t'), t.value);
     else if (t.hasAttribute('data-ev')) D.game.events[+card.getAttribute('data-e')][t.getAttribute('data-ev')] = t.value;
+    else if (t.hasAttribute('data-pf')) {
+      var pf = t.getAttribute('data-pf'), pr = D.claims.prices[+card.getAttribute('data-p')];
+      if (pf === 'price') pr.price = num(t.value);
+      else if ((pf === 'text' || pf === 'why') && !t.value.trim()) delete pr[pf];
+      else pr[pf] = t.value;
+    }
     else return;
     save();
   });
@@ -388,6 +424,11 @@
     } else if (act === 'edel') {
       if (!confirm('Удалить это событие?')) return;
       D.game.events.splice(+card.getAttribute('data-e'), 1);
+    } else if (act === 'padd') {
+      D.claims.prices.unshift({ item: 'phone', price: 50000, pay: 'note1000' });
+    } else if (act === 'pdel') {
+      if (!confirm('Удалить эту задачу?')) return;
+      D.claims.prices.splice(+card.getAttribute('data-p'), 1);
     } else if (act === 'gonew') {
       return setTab('new');
     }

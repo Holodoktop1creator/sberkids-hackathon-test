@@ -46,6 +46,7 @@
   }
 
   function fmtLen(m) {
+    if (m < 0.01) return dec(m * 1000, 1) + ' мм';
     if (m < 0.1) return dec(m * 100, 1) + ' см';
     if (m < 1) return Math.round(m * 100) + ' см';
     if (m < 10) return dec(m, 1) + ' м';

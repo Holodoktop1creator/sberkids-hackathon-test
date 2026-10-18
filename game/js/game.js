@@ -87,6 +87,7 @@
   // ---------- Раунд ----------
   var ASK = { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', diam: 'какой диаметр?', area: 'какая площадь?' };
   function askText(r) {
+    if (r.claim && r.claim.ask) return r.claim.ask;
     var ask = S.content.cfg.texts.ask || {};
     var key = r.kind === 'countries' ? 'area' : r.target.dim;
     return typeof ask[key] === 'string' && ask[key] ? ask[key] : ASK[key];
@@ -108,9 +109,10 @@
     k.textContent = kickerText(r, i);
     k.className = 'kicker' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
     // громкое заявление, которое надо проверить
-    $('claim').textContent = '«' + r.claim.text.replace(/\.$/, '') + '»';
+    $('claim').textContent = r.claim.task ? r.claim.text : '«' + r.claim.text.replace(/\.$/, '') + '»';
     restart($('claim'), 'in');
-    $('ask').innerHTML = '🔎 Проверь: <b>' + esc(r.target.name) + '</b> — ' + esc(askText(r));
+    $('ask').innerHTML = r.claim.task ? '🔎 Растяни <b>' + esc(r.target.name.toLowerCase()) + '</b> до нужной высоты'
+      : '🔎 Проверь: <b>' + esc(r.target.name) + '</b> — ' + esc(askText(r));
     $('board').classList.toggle('boss', !!r.boss);
     $('turn').hidden = true;
     // белый силуэт стартует в размере, который обещает заявление
@@ -126,7 +128,7 @@
 
   function showIntro(r) {
     var tag = $('intro-tag');
-    tag.textContent = r.boss ? '⚡ БОСС ×2 · фейк или правда? ⚡' : r.rematch ? '🔁 РЕВАНШ' : '🕵️ Фейк или правда?';
+    tag.textContent = r.boss ? '⚡ БОСС ×2 · фейк или правда? ⚡' : r.rematch ? '🔁 РЕВАНШ' : r.claim.task ? '💰 Сколько это в деньгах?' : '🕵️ Фейк или правда?';
     tag.className = 'intro-tag' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
     $('intro-a').textContent = r.target.name;
     $('intro-b').innerHTML = '';
@@ -245,8 +247,8 @@
     B.reveal();
     var v = $('verdict');
     var cl = S.rounds[S.idx].claim;
-    v.textContent = cl.isTrue ? '✅ ПРАВДА' : '🕵️ ФЕЙК!';
-    v.className = 'verdict ' + (cl.isTrue ? 'is-true' : 'is-fake');
+    v.textContent = cl.task ? '💰 ' + U.fmtLen(S.rounds[S.idx].target.value) + '!' : cl.isTrue ? '✅ ПРАВДА' : '🕵️ ФЕЙК!';
+    v.className = 'verdict ' + (cl.isTrue || cl.task ? 'is-true' : 'is-fake');
     restart(v, 'show');
     App.sound.play('slam');
     restart($('board'), 'shake');
@@ -274,6 +276,7 @@
 
   // Вердикт детектора: фейк раскрыт, если ребёнок подогнал силуэт близко к правде
   function verdictHtml(r, pts) {
+    if (r.claim.task) return '💰 <b>Цена в купюрах.</b> ' + (S.duel ? '' : pts >= 65 ? 'Прикинуто верно 👏' : 'Смотри расчёт 👇');
     if (S.duel) return r.claim.isTrue ? '✅ <b>Это правда.</b>' : '🕵️ <b>Это фейк!</b>';
     if (r.claim.isTrue) return '✅ <b>Это правда.</b> ' + (pts >= 65 ? 'Проверка пройдена 👏' : 'Не всё в сети — фейк 🙂');
     return '🕵️ <b>Это фейк!</b> ' + (pts >= 65 ? 'Раскрыт 👏' : 'Он почти обманул — смотри правду 👇');
@@ -285,7 +288,7 @@
     var pts = points(g);
     var gained = pts * (r.boss ? 2 : 1);
     S.score += gained;
-    S.results[S.idx] = { pts: pts, gained: gained, round: r, isTrue: r.claim.isTrue, caught: pts >= 65 };
+    S.results[S.idx] = { pts: pts, gained: gained, round: r, isTrue: r.claim.isTrue, task: !!r.claim.task, caught: pts >= 65 };
     S.combo = pts >= 65 ? S.combo + 1 : 0;
     S.bestCombo = Math.max(S.bestCombo, S.combo);
 
@@ -307,7 +310,7 @@
       band: band(pts),
       rank: rankText(pts),
       ratio: verdictHtml(r, pts) + '<br>На самом деле: <b>' + esc(lines.truth) + '</b>' +
-        (r.claim.isTrue ? '' : '<br>Фейк говорил: ' + esc(lines.said)) + '<br>У тебя: ' + esc(lines.guess),
+        (r.claim.isTrue || r.claim.task ? '' : '<br>Фейк говорил: ' + esc(lines.said)) + '<br>У тебя: ' + esc(lines.guess),
       round: r
     });
     celebrate(pts);
@@ -363,8 +366,8 @@
     $('res-rank').textContent = o.rank;
     $('res-ratio').innerHTML = o.ratio;
     var cl = o.round.claim;
-    $('fact-title').textContent = cl.isTrue ? '✅ ПОЧЕМУ ПРАВДА' : '🕵️ ПОЧЕМУ ФЕЙК';
-    $('fact-name').textContent = o.round.target.name;
+    $('fact-title').textContent = cl.task ? '🧮 КАК ПОСЧИТАТЬ' : cl.isTrue ? '✅ ПОЧЕМУ ПРАВДА' : '🕵️ ПОЧЕМУ ФЕЙК';
+    $('fact-name').textContent = cl.task ? o.round.ref.name : o.round.target.name;
     $('res-fact').textContent = cl.why || (cl.isTrue ? 'Заявление совпадает с настоящими размерами.' :
       'Заявление сильно ошибается — сравни с эталоном выше. Громкие слова ещё не факт!');
     $('res-tip').textContent = o.round.target.fact ? '🤯 ' + o.round.target.fact : '';
@@ -416,8 +419,9 @@
     $('end-grid').textContent = grid;
 
     var best = S.results.reduce(function (a, b) { return !a || b.pts > a.pts ? b : a; }, null);
-    var fakes = S.results.filter(function (x) { return !x.isTrue; });
+    var fakes = S.results.filter(function (x) { return !x.isTrue && !x.task; });
     var truths = S.results.filter(function (x) { return x.isTrue; });
+    var tasks = S.results.filter(function (x) { return x.task; });
     var caught = fakes.filter(function (x) { return x.caught; }).length;
     var confirmed = truths.filter(function (x) { return x.caught; }).length;
     function avg(list) { return list.length ? Math.round(list.reduce(function (a, b) { return a + b.pts; }, 0) / list.length) : 0; }
@@ -426,6 +430,7 @@
     $('end-best').innerHTML = '<h3>Детектор</h3><ul>' +
       '<li>🕵️ Раскрыто фейков: <b>' + caught + ' из ' + fakes.length + '</b></li>' +
       (truths.length ? '<li>✅ Правда подтверждена: <b>' + confirmed + ' из ' + truths.length + '</b></li>' : '') +
+      (tasks.length ? '<li>💰 Цен в купюрах прикинуто: <b>' + tasks.filter(function (x) { return x.caught; }).length + ' из ' + tasks.length + '</b></li>' : '') +
       (S.results.length >= 6 ? '<li>📈 Точность прикидки: в начале ' + early + '%, в конце ' + late + '%' + (late >= early + 10 ? ' — прогресс! 🚀' : '') + '</li>' : '') +
       (best ? '<li>🎯 ' + esc(best.round.target.name) + ' vs ' + esc(best.round.ref.name) + ' — ' + best.pts + ' ' + U.plural(best.pts, ['очко', 'очка', 'очков']) + '</li>' : '') +
       (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') +
