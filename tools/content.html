@@ -36,8 +36,8 @@
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
   .card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #fff; display: flex; flex-direction: column; gap: 6px; }
   .card.bad { border-color: var(--bad); background: #fff5f8; }
-  /* силуэты на тёмной доске — как в игре */
-  .card svg { display: block; width: 100%; height: 110px; background: #111317 repeating-linear-gradient(0deg, transparent 0 19px, rgba(255,255,255,.06) 19px 20px); border-radius: 8px; }
+  /* силуэты на пастельной доске — как в игре */
+  .card svg { display: block; width: 100%; height: 110px; background: #ffe9c4 repeating-linear-gradient(0deg, transparent 0 19px, rgba(255,255,255,.7) 19px 21px); border-radius: 8px; }
   .card label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #6b6290; }
   .card input, .card select, .card textarea, .wide input, .wide textarea { font: inherit; color: var(--ink); padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; width: 100%; }
   .card textarea, .wide textarea { resize: vertical; min-height: 54px; }
@@ -58,7 +58,7 @@
   .form label { display: flex; flex-direction: column; font-size: 12px; gap: 3px; }
   .form input, .form select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 120px; }
   .preview { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .preview svg { width: 100%; height: 220px; background: #111317; border-radius: 12px; border: 2px solid var(--ink); }
+  .preview svg { width: 100%; height: 220px; background: #ffe9c4; border-radius: 12px; border: 2px solid var(--ink); }
   @media (max-width: 700px) { .preview { grid-template-columns: 1fr; } header { position: static; } }
 </style>
 </head>
@@ -188,7 +188,7 @@
   function shape(it, which, x, y, w) {
     var k = w / it.vb[2];
     var inner = it.layers ? App.assets.layer(it, which)
-      : '<g fill="' + (which === 'ref' ? '#c3c8d0' : which === 'truth' ? 'none' : '#d4f55a') + '" stroke="' + (which === 'ref' ? 'none' : which === 'truth' ? '#3fd8c8' : '#0b0c0e') + '" stroke-width="3" vector-effect="non-scaling-stroke">' + it.markup + '</g>';
+      : '<g fill="' + (which === 'ref' ? '#2c2862' : which === 'truth' ? 'none' : '#b6ee3a') + '" stroke="' + (which === 'ref' ? 'none' : which === 'truth' ? '#6c4dff' : '#221e4f') + '" stroke-width="3" vector-effect="non-scaling-stroke">' + it.markup + '</g>';
     return '<g transform="translate(' + x + ' ' + y + ') scale(' + k + ') translate(' + (-it.vb[0]) + ' ' + (-it.vb[1]) + ')">' + inner + '</g>';
   }
   function scene(items, W, H) {
@@ -201,7 +201,7 @@
       out += shape(it, it._style || 'ref', x, H - pad - it.h * s, it.w * s);
       x += it.w * s + gap;
     });
-    return out + '<line x1="0" x2="' + W + '" y1="' + (H - pad) + '" y2="' + (H - pad) + '" stroke="rgba(255,255,255,.24)" stroke-width="1.5"/>';
+    return out + '<line x1="0" x2="' + W + '" y1="' + (H - pad) + '" y2="' + (H - pad) + '" stroke="rgba(34,30,79,.28)" stroke-width="2"/>';
   }
 
   // ---------- сводка ----------

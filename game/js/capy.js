@@ -7,14 +7,14 @@
   var D = '#21170f';
   var SVG = [
     '<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">',
-    '<ellipse cx="60" cy="114" rx="34" ry="4" fill="rgba(0,0,0,.4)"/>',
+    '<ellipse cx="60" cy="114" rx="34" ry="4" fill="rgba(34,30,79,.18)"/>',
     '<g class="body">',
     // туловище и лапы
     '<path d="M24 98c0-14 16-24 36-24s36 10 36 24c0 9-8 14-36 14S24 107 24 98z" fill="#6f4a2e"/>',
     '<rect x="38" y="103" width="15" height="10" rx="5" fill="#553823"/>',
     '<rect x="67" y="103" width="15" height="10" rx="5" fill="#553823"/>',
     // медаль
-    '<g class="acc acc-medal"><path d="M53 80l7 13 7-13" fill="none" stroke="#3fd8c8" stroke-width="4" stroke-linejoin="round"/><circle cx="60" cy="99" r="8.5" fill="#e9b949"/><circle cx="60" cy="99" r="5" fill="none" stroke="#b98a2b" stroke-width="1.6"/></g>',
+    '<g class="acc acc-medal"><path d="M53 80l7 13 7-13" fill="none" stroke="#6c4dff" stroke-width="4" stroke-linejoin="round"/><circle cx="60" cy="99" r="8.5" fill="#e9b949"/><circle cx="60" cy="99" r="5" fill="none" stroke="#b98a2b" stroke-width="1.6"/></g>',
     // уши и голова
     '<ellipse cx="34" cy="24" rx="7.5" ry="6.5" fill="#553823"/>',
     '<ellipse cx="86" cy="24" rx="7.5" ry="6.5" fill="#553823"/>',
@@ -38,11 +38,11 @@
     '<path class="mouth m-happy" d="M53.5 70.5q6.5 9 13 0z" fill="' + D + '"/>',
     '<ellipse class="mouth m-shock" cx="60" cy="74" rx="3.4" ry="4.2" fill="' + D + '"/>',
     // очки
-    '<g class="acc acc-glasses"><rect x="30" y="37" width="25" height="14" rx="5" fill="#0e0f11"/><rect x="65" y="37" width="25" height="14" rx="5" fill="#0e0f11"/><path d="M55 43h10" stroke="#0e0f11" stroke-width="3"/><path d="M34 41h6M69 41h6" stroke="#d4f55a" stroke-width="2" stroke-linecap="round" opacity=".85"/></g>',
+    '<g class="acc acc-glasses"><rect x="30" y="37" width="25" height="14" rx="5" fill="#0e0f11"/><rect x="65" y="37" width="25" height="14" rx="5" fill="#0e0f11"/><path d="M55 43h10" stroke="#0e0f11" stroke-width="3"/><path d="M34 41h6M69 41h6" stroke="#b6ee3a" stroke-width="2" stroke-linecap="round" opacity=".9"/></g>',
     // апельсинка на голове — капибары так умеют
     '<g class="acc acc-orange"><circle cx="60" cy="13" r="11" fill="#f39a2b"/><circle cx="56" cy="9.5" r="3" fill="#ffc06a" opacity=".8"/><path d="M60 3c3-5 9-5 12-2-4 3-8 3.5-12 2z" fill="#5fb865"/></g>',
     // корона
-    '<g class="acc acc-crown"><path d="M42 23l3-17 9 9 6-13 6 13 9-9 3 17z" fill="#e9b949"/><path d="M42 23h36" stroke="#b98a2b" stroke-width="2.5"/><circle cx="60" cy="15" r="2.6" fill="#3fd8c8"/></g>',
+    '<g class="acc acc-crown"><path d="M42 23l3-17 9 9 6-13 6 13 9-9 3 17z" fill="#e9b949"/><path d="M42 23h36" stroke="#b98a2b" stroke-width="2.5"/><circle cx="60" cy="15" r="2.6" fill="#ff5ca8"/></g>',
     '</g></svg>'
   ].join('');
 

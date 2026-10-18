@@ -24,7 +24,7 @@
     unlocks: [],
     lessons: {},
     modes: { chaos: true, animals: true, countries: true, money: true, duel: true },
-    theme: { animals: '#ffb547', countries: '#6cc0ff', money: '#5ddc8c' },
+    theme: { animals: '#ffe9c4', countries: '#dcefff', money: '#dbf6e8' },
     texts: {
       tagline: 'Фейк или правда? Растяни силуэт\nдо **настоящего** размера.',
       capy: ['Я Капи. Проверяю громкие заявления.'],

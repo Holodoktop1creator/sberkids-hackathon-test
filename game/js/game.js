@@ -33,8 +33,8 @@
   var capyEnd = $('capy-end');
 
   // Цвета палитры для canvas-эффектов и карточки (те же, что в css/style.css)
-  var C = { lime: '#d4f55a', teal: '#3fd8c8', green: '#5ddc8c', red: '#ff5a4f', amber: '#ffb547', violet: '#a98bff', text: '#f3f4f6', mute: '#454a52' };
-  var BAND_COLOR = [C.mute, C.amber, C.green, C.lime];
+  var C = { lime: '#b6ee3a', violet: '#6c4dff', green: '#17b26a', red: '#ff4d5e', orange: '#ff8a3d', yellow: '#ffc83d', pink: '#ff5ca8', sky: '#3fb2ff', mute: '#cfcbe6' };
+  var BAND_COLOR = [C.mute, '#ffb020', '#9cd92b', C.green];
 
   // ---------- Экраны ----------
   function show(id) {
@@ -285,7 +285,7 @@
       App.sound.play('slam');
       restart(board, 'shake');
       var br = board.getBoundingClientRect();
-      App.fx.ring(br.left + br.width / 2, br.top + br.height * 0.42, cl.task ? C.teal : cl.isTrue ? C.green : C.red, Math.min(br.width, 300) * 0.55, 5);
+      App.fx.ring(br.left + br.width / 2, br.top + br.height * 0.42, cl.task ? C.violet : cl.isTrue ? C.green : C.red, Math.min(br.width, 300) * 0.55, 6);
       return U.wait(450);
     }).then(function () {
       if (ep !== S.epoch) return;
@@ -390,13 +390,13 @@
   function celebrate(pts) {
     var p = B.truthPoint();
     if (pts >= 85) {
-      App.fx.ring(p.x, p.y, C.lime, 130, 5);
+      App.fx.ring(p.x, p.y, C.violet, 130, 6);
       App.fx.sparks(p.x, p.y, pts === 100 ? 26 : 18, null, pts === 100 ? 1.2 : 1);
       if (pts === 100) App.fx.confetti(70);
       App.sound.play('win');
       App.bridge.vibrate();
     } else if (pts >= 65) {
-      App.fx.sparks(p.x, p.y, 12, [C.lime, C.teal, C.text], 0.8);
+      App.fx.sparks(p.x, p.y, 12, [C.violet, C.lime, C.yellow], 0.8);
       App.sound.play('star', 1);
     } else {
       App.fx.dust(p.x, p.y, 12);
@@ -555,7 +555,7 @@
     var cd = $('capy-duel');
     App.capy.mount(cd, 'happy');
     App.capy.wear(cd, S.acc);
-    // кто был ближе в каждом раунде: лайм — Игрок 1, фиолетовый — Игрок 2, серый — ничья
+    // кто был ближе в каждом раунде: лайм — Игрок 1, розовый — Игрок 2, серый — ничья
     $('duel-grid').innerHTML = pips(S.duelMarks.map(function (w) { return 'w' + w; }));
     show('scr-duel-end');
     App.fx.confetti(70);
@@ -612,7 +612,7 @@
   $('btn-duel-share').addEventListener('click', function () {
     var a = S.duelScore[0], b = S.duelScore[1];
     var grid = S.duelMarks.map(function (w) { return ['⬜', '🟩', '🟪'][w]; }).join('');
-    var winColor = [C.mute, C.lime, C.violet];
+    var winColor = [C.mute, C.lime, C.pink];
     doShare('Дуэль в «Прикинь!»: ' + a + ' : ' + b + ' ' + grid + '\nКто прикинет точнее?', {
       kicker: 'Дуэль на одном телефоне', big: a + ' : ' + b, small: '', title: $('duel-title').textContent, sub: 'Кто ближе к правде в каждом раунде',
       marks: S.duelMarks.map(function (w) { return { color: winColor[w], boss: false }; }), capy: { acc: S.acc, mood: 'happy' }, footer: 'Кто прикинет точнее?'
@@ -703,7 +703,7 @@
     var capy = $('capy-start');
     App.capy.mood(capy, 'happy');
     var cr = capy.getBoundingClientRect();
-    App.fx.sparks(cr.left + cr.width / 2, cr.top + cr.height * 0.3, 12, [C.lime, C.amber, C.text], 0.8);
+    App.fx.sparks(cr.left + cr.width / 2, cr.top + cr.height * 0.3, 12, [C.violet, C.yellow, C.pink, C.lime], 0.8);
     App.sound.play('star', 0);
     App.bridge.vibrate();
   });
@@ -741,7 +741,7 @@
         if (/^#[0-9a-f]{3,8}$/i.test(ev.theme[k] || '')) theme[k] = ev.theme[k];
       });
     }
-    // цвет темы — подсветка доски сверху, сама доска всегда тёмная
+    // цвет темы — пастельный фон доски для зверей, стран и денег
     document.documentElement.style.setProperty('--board-a', theme.animals);
     document.documentElement.style.setProperty('--board-c', theme.countries);
     document.documentElement.style.setProperty('--board-m', theme.money);
@@ -754,8 +754,8 @@
     var evEl = $('event');
     evEl.hidden = !ev;
     if (ev) {
-      evEl.querySelector('b').textContent = ev.title;
-      evEl.querySelector('span').textContent = ev.text || '';
+      evEl.querySelector('.ev-title').textContent = ev.title;
+      evEl.querySelector('.ev-text').textContent = ev.text || '';
     }
     var m = cfg.modes;
     document.querySelector('[data-mode="chaos"]').hidden = !m.chaos;

@@ -14,9 +14,9 @@
     "money": true
   },
   "theme": {
-    "animals": "#ffb547",
-    "countries": "#6cc0ff",
-    "money": "#5ddc8c"
+    "animals": "#ffe9c4",
+    "countries": "#dcefff",
+    "money": "#dbf6e8"
   },
   "texts": {
     "tagline": "Фейк или правда? Растяни силуэт\nдо **настоящего** размера.",
@@ -44,7 +44,7 @@
       "title": "Неделя древних гигантов",
       "text": "Динозавры и мамонты — в босс-раундах!",
       "theme": {
-        "animals": "#ff8a3d"
+        "animals": "#ffd9b3"
       },
       "capy": [
         "crown"
@@ -85,8 +85,8 @@
       "title": "Зимний масштаб",
       "text": "Белые медведи, пингвины и самые холодные края",
       "theme": {
-        "animals": "#9ad7ff",
-        "countries": "#bfe6ff"
+        "animals": "#e2f3ff",
+        "countries": "#e8f5ff"
       },
       "traps": {
         "animals": [

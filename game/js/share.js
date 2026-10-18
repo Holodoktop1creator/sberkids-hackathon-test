@@ -64,7 +64,7 @@
   function ruler(x, x0, y, w) {
     for (var i = 0; i <= w; i += 7) {
       var major = i % 35 === 0;
-      x.fillStyle = major ? '#d4f55a' : '#6d737e';
+      x.fillStyle = major ? '#6c4dff' : '#9b97bc';
       x.fillRect(x0 + i, y + (major ? 0 : 5), major ? 2 : 1, major ? 11 : 6);
     }
   }
@@ -85,25 +85,36 @@
     }
 
     function finish(img) {
-      x.fillStyle = '#0b0c0e';
+      // лавандовый фон с пастельными пятнами, как в игре
+      x.fillStyle = '#f4f1ff';
       x.fillRect(0, 0, W, H);
-      glow(70, 50, 380, 'rgba(212,245,90,0.16)');
-      glow(560, 770, 340, 'rgba(63,216,200,0.12)');
-      x.strokeStyle = 'rgba(255,255,255,0.08)';
-      x.lineWidth = 2;
-      roundRect(x, 20, 20, W - 40, H - 40, 28);
-      x.stroke();
+      glow(40, 30, 380, 'rgba(182,238,58,0.40)');
+      glow(590, 60, 300, 'rgba(255,92,168,0.20)');
+      glow(580, 790, 380, 'rgba(108,77,255,0.22)');
+      glow(0, 800, 300, 'rgba(63,178,255,0.18)');
 
       x.textAlign = 'center';
       x.textBaseline = 'alphabetic';
-      x.fillStyle = '#6d737e';
-      x.font = '600 17px ' + TEXT;
-      spaced(x, o.kicker.toUpperCase(), W / 2, 78, 4);
-      x.fillStyle = '#d4f55a';
+      x.fillStyle = '#6c4dff';
+      x.font = '700 17px ' + TEXT;
+      spaced(x, o.kicker.toUpperCase(), W / 2, 72, 4);
+      // логотип с лаймовым маркером
       x.font = '800 64px ' + DISPLAY;
-      fit(x, 'ПРИКИНЬ!', W / 2, 150, W - 120);
-      ruler(x, W / 2 - 140, 166, 280);
-      if (img) x.drawImage(img, W / 2 - 95, 194, 190, 190);
+      var lw = Math.min(x.measureText('ПРИКИНЬ!').width, W - 120);
+      x.fillStyle = '#b6ee3a';
+      x.fillRect(W / 2 - lw / 2 - 8, 116, lw + 16, 26);
+      x.fillStyle = '#221e4f';
+      fit(x, 'ПРИКИНЬ!', W / 2, 140, W - 120);
+      ruler(x, W / 2 - 140, 160, 280);
+      // Капи на лаймовом круге
+      var cg = x.createRadialGradient(W / 2 - 30, 250, 10, W / 2, 290, 120);
+      cg.addColorStop(0, '#ecfcc0');
+      cg.addColorStop(1, '#d9f78a');
+      x.fillStyle = cg;
+      x.beginPath();
+      x.arc(W / 2, 292, 112, 0, Math.PI * 2);
+      x.fill();
+      if (img) x.drawImage(img, W / 2 - 92, 200, 184, 184);
 
       // крупный счёт: число белым, «/ максимум» — приглушённо
       x.font = '800 92px ' + DISPLAY;
@@ -112,20 +123,20 @@
       var sw = o.small ? x.measureText(o.small).width : 0;
       var sx = W / 2 - (bw + sw) / 2;
       x.textAlign = 'left';
-      x.fillStyle = '#f3f4f6';
+      x.fillStyle = '#221e4f';
       x.font = '800 92px ' + DISPLAY;
       x.fillText(o.big, sx, 488);
       if (o.small) {
-        x.fillStyle = '#6d737e';
+        x.fillStyle = '#9b97bc';
         x.font = '600 38px ' + DISPLAY;
         x.fillText(o.small, sx + bw, 488);
       }
       x.textAlign = 'center';
-      x.fillStyle = '#f3f4f6';
-      x.font = '700 32px ' + TEXT;
+      x.fillStyle = '#221e4f';
+      x.font = '800 32px ' + TEXT;
       fit(x, o.title, W / 2, 542, W - 100);
       if (o.sub) {
-        x.fillStyle = '#a9afb9';
+        x.fillStyle = '#5f5b88';
         x.font = '500 22px ' + TEXT;
         fit(x, o.sub, W / 2, 578, W - 100);
       }
@@ -138,7 +149,7 @@
         o.marks.forEach(function (m, i) {
           var px = mx + i * (sq + gap);
           if (m.boss) {
-            x.strokeStyle = '#ffb547';
+            x.strokeStyle = '#ff8a3d';
             x.lineWidth = 3;
             roundRect(x, px - 5, my - 5, sq + 10, sq + 10, 12);
             x.stroke();
@@ -150,14 +161,15 @@
       }
 
       if (o.footer) {
-        x.fillStyle = '#15171b';
-        roundRect(x, 60, 684, W - 120, 68, 20);
+        // объёмная фиолетовая плашка-вызов, как кнопки в игре
+        x.fillStyle = '#4b2fd6';
+        roundRect(x, 60, 690, W - 120, 68, 22);
         x.fill();
-        x.strokeStyle = 'rgba(255,255,255,0.08)';
-        x.lineWidth = 2;
-        x.stroke();
-        x.fillStyle = '#f3f4f6';
-        x.font = '600 24px ' + TEXT;
+        x.fillStyle = '#6c4dff';
+        roundRect(x, 60, 684, W - 120, 68, 22);
+        x.fill();
+        x.fillStyle = '#ffffff';
+        x.font = '700 24px ' + TEXT;
         fit(x, o.footer, W / 2, 727, W - 160);
       }
       // JPEG в разы легче PNG — сообщение через мост остаётся небольшим
