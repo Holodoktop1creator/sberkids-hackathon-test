@@ -8,7 +8,7 @@
   // силуэт в стили «эталон», «догадка», «ответ». Никаких скриптов сборки.
   // Цвета — те же, что у векторных силуэтов в css/style.css.
   var MAX = 640;             // сторона растра, px
-  var REF = '#c3c8d0', DARK = '#0b0c0e', LIME = '#d4f55a', VIOLET = '#a98bff', TEAL = '#3fd8c8';
+  var REF = '#2c2862', INK = '#221e4f', LIME = '#b6ee3a', PINK = '#ff5ca8', VIOLET = '#6c4dff';
   var cache = {};
 
   function canvas(w, h) {
@@ -115,7 +115,7 @@
       x.drawImage(src, pad, pad);
       x.globalCompositeOperation = 'source-over';
       x.globalAlpha = 0.16;
-      x.drawImage(tint(src, TEAL), pad, pad);
+      x.drawImage(tint(src, VIOLET), pad, pad);
       x.globalAlpha = 1;
     } else {
       x.drawImage(tint(src, fill), pad, pad);
@@ -133,9 +133,9 @@
         return {
           w: a.w, h: a.h, filled: a.filled, pad: pad,
           ref: url(tint(a.src, REF)),
-          g1: url(outlined(a.src, LIME, DARK, r, pad)),
-          g2: url(outlined(a.src, VIOLET, DARK, r, pad)),
-          truth: url(outlined(a.src, null, TEAL, r * 1.2, pad))
+          g1: url(outlined(a.src, LIME, INK, r, pad)),
+          g2: url(outlined(a.src, PINK, INK, r, pad)),
+          truth: url(outlined(a.src, null, VIOLET, r * 1.3, pad))
         };
       });
     }

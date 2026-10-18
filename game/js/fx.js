@@ -11,7 +11,7 @@
   var W = 0, H = 0, dpr = 1;
   var parts = [];
   var running = false;
-  var PALETTE = ['#d4f55a', '#3fd8c8', '#f3f4f6', '#ffb547', '#a98bff'];
+  var PALETTE = ['#6c4dff', '#b6ee3a', '#ff5ca8', '#ffc83d', '#3fb2ff'];
   var MAX = 160;
   var TAU = Math.PI * 2;
 
@@ -120,7 +120,7 @@
         var p = base('dot', x + U.rand(-30, 30), y + U.rand(-16, 16));
         p.vx = U.rand(-0.6, 0.6); p.vy = U.rand(-1.4, -0.2);
         p.g = 0.03; p.drag = 0.98; p.size = U.rand(1.5, 3.2);
-        p.color = '#6d737e'; p.life = U.rand(40, 60) | 0; p.a = 0.8;
+        p.color = '#a9a4cc'; p.life = U.rand(40, 60) | 0; p.a = 0.8;
         add(p);
       }
     }
