@@ -6,8 +6,9 @@
   // и пишет одну строку в content/items.json. Игра сама обрезает пустые края,
   // считает пропорции (у стран — площадь по закрашенным пикселям) и перекрашивает
   // силуэт в стили «эталон», «догадка», «ответ». Никаких скриптов сборки.
+  // Цвета — те же, что у векторных силуэтов в css/style.css.
   var MAX = 640;             // сторона растра, px
-  var INK = '#1b1340', WHITE = '#ffffff', PINK = '#ff5ca8', HOT = '#ff2d95';
+  var REF = '#c3c8d0', DARK = '#0b0c0e', LIME = '#d4f55a', VIOLET = '#a98bff', TEAL = '#3fd8c8';
   var cache = {};
 
   function canvas(w, h) {
@@ -113,8 +114,8 @@
       x.globalCompositeOperation = 'destination-out';
       x.drawImage(src, pad, pad);
       x.globalCompositeOperation = 'source-over';
-      x.globalAlpha = 0.22;
-      x.drawImage(tint(src, HOT), pad, pad);
+      x.globalAlpha = 0.16;
+      x.drawImage(tint(src, TEAL), pad, pad);
       x.globalAlpha = 1;
     } else {
       x.drawImage(tint(src, fill), pad, pad);
@@ -131,10 +132,10 @@
         var pad = Math.ceil(r * 1.6) + 1;
         return {
           w: a.w, h: a.h, filled: a.filled, pad: pad,
-          ref: url(tint(a.src, INK)),
-          g1: url(outlined(a.src, WHITE, INK, r, pad)),
-          g2: url(outlined(a.src, PINK, INK, r, pad)),
-          truth: url(outlined(a.src, null, HOT, r * 1.5, pad))
+          ref: url(tint(a.src, REF)),
+          g1: url(outlined(a.src, LIME, DARK, r, pad)),
+          g2: url(outlined(a.src, VIOLET, DARK, r, pad)),
+          truth: url(outlined(a.src, null, TEAL, r * 1.2, pad))
         };
       });
     }

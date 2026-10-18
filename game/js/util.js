@@ -45,6 +45,28 @@
     return s.replace('.', ',');
   }
 
+  // Эмодзи из текстов контента не показываем: у игры свои иконки и единый стиль
+  var EMOJI = /(?:\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|\uD83E[\uDC00-\uDFFF]|[\u2300-\u23FF\u2600-\u27BF\u2B00-\u2BFF\uFE0F\u200D\u20E3])/g;
+  function plain(s) {
+    return String(s == null ? '' : s).replace(EMOJI, '').replace(/[ \t]{2,}/g, ' ').replace(/^\s+|\s+$/g, '');
+  }
+
+  // Плавный счёт числа от from до to — «настоящий» счётчик вместо прыгающих цифр
+  var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  function countUp(el, from, to, ms, fmtFn) {
+    fmtFn = fmtFn || function (v) { return String(v); };
+    cancelAnimationFrame(el._cu || 0);
+    if (reduced || from === to) { el.innerHTML = fmtFn(to); return; }
+    var t0 = 0;
+    function step(t) {
+      if (!t0) t0 = t;
+      var k = Math.min(1, (t - t0) / ms);
+      el.innerHTML = fmtFn(Math.round(from + (to - from) * easeOut(k)));
+      if (k < 1) el._cu = requestAnimationFrame(step);
+    }
+    el._cu = requestAnimationFrame(step);
+  }
+
   function fmtLen(m) {
     if (m < 0.01) return dec(m * 1000, 1) + ' мм';
     if (m < 0.1) return dec(m * 100, 1) + ' см';
@@ -70,6 +92,9 @@
 
   App.util = {
     fmt: fmt, plural: plural, clamp: clamp, rand: rand, pick: pick, shuffle: shuffle, easeOut: easeOut,
-    wait: wait, store: store, dec: dec, fmtLen: fmtLen, fmtArea: fmtArea, fmtKm: fmtKm, fmtRatio: fmtRatio
+    wait: wait, store: store, dec: dec, fmtLen: fmtLen, fmtArea: fmtArea, fmtKm: fmtKm, fmtRatio: fmtRatio,
+    plain: plain, countUp: countUp, reduced: reduced,
+    // разметка иконки из спрайта в index.html
+    icon: function (name, cls) { return '<svg class="ic' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + name + '"/></svg>'; }
   };
 })();

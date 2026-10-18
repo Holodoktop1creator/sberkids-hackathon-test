@@ -17,18 +17,18 @@
     ratio: { animals: [1.2, 15], countries: [1.3, 40] },
     traps: { animals: [], countries: [] },
     ranks: [
-      { min: 100, text: 'ИДЕАЛЬНО! 🎯' }, { min: 85, text: 'ИМБА! 🔥' }, { min: 65, text: 'ХОРОШ! 😎' },
-      { min: 40, text: 'ТЕПЛО 🙂' }, { min: 15, text: 'ХОЛОДНО 🥶' }, { min: 0, text: 'МИМО 😵‍💫' }
+      { min: 100, text: 'В точку' }, { min: 85, text: 'Отлично' }, { min: 65, text: 'Хорошо' },
+      { min: 40, text: 'Тепло' }, { min: 15, text: 'Холодно' }, { min: 0, text: 'Мимо' }
     ],
-    titles: [{ min: 0, name: 'Прикидчик', emoji: '🧮' }],
+    titles: [{ min: 0, name: 'Прикидчик' }],
     unlocks: [],
     lessons: {},
     modes: { chaos: true, animals: true, countries: true, money: true, duel: true },
-    theme: { animals: '#ffcf3d', countries: '#63e6ff', money: '#8ee28a' },
+    theme: { animals: '#ffb547', countries: '#6cc0ff', money: '#5ddc8c' },
     texts: {
-      tagline: 'Фейк или правда? Растяни силуэт\nдо **настоящего** размера!',
-      capy: ['Йо! Я Капи — детектор фейков 🕵️'],
-      share: 'Сможешь прикинуть точнее? 😏',
+      tagline: 'Фейк или правда? Растяни силуэт\nдо **настоящего** размера.',
+      capy: ['Я Капи. Проверяю громкие заявления.'],
+      share: 'Сможешь прикинуть точнее?',
       ask: { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', area: 'какая площадь?' }
     },
     events: []
@@ -119,6 +119,36 @@
     cfg.events = Array.isArray(cfg.events) ? cfg.events.filter(function (e) {
       return e && isDate(e.from) && isDate(e.to) && isStr(e.title);
     }) : [];
+    return cleanTexts(cfg);
+  }
+
+  // Тексты для показа: без эмодзи (у игры свои иконки) и без битых записей.
+  // Исходные объекты не трогаем — в редакторе это живой черновик менеджера.
+  function cleanTexts(cfg) {
+    var P = U.plain;
+    function obj(x) { return x && typeof x === 'object'; }
+    function copy(o, patch) {
+      var c = {};
+      Object.keys(o).forEach(function (k) { c[k] = o[k]; });
+      Object.keys(patch).forEach(function (k) { c[k] = patch[k]; });
+      return c;
+    }
+    var ranks = cfg.ranks.filter(obj).map(function (r) { return copy(r, { text: P(r.text) }); });
+    var titles = cfg.titles.filter(obj).map(function (t) { return copy(t, { name: P(t.name) }); });
+    cfg.ranks = ranks.length ? ranks : DEFAULTS.ranks;
+    cfg.titles = titles.length ? titles : DEFAULTS.titles;
+    cfg.unlocks = cfg.unlocks.filter(obj).map(function (u) { return copy(u, { label: P(u.label) }); });
+    var lessons = {};
+    Object.keys(cfg.lessons).forEach(function (k) { if (isStr(cfg.lessons[k])) lessons[k] = P(cfg.lessons[k]); });
+    cfg.lessons = lessons;
+    cfg.texts = copy(cfg.texts, {
+      tagline: P(cfg.texts.tagline),
+      share: P(cfg.texts.share),
+      capy: Array.isArray(cfg.texts.capy) ? cfg.texts.capy.filter(isStr).map(P).filter(isStr) : []
+    });
+    cfg.events = cfg.events.map(function (e) {
+      return copy(e, { title: P(e.title), text: isStr(e.text) ? P(e.text) : '' });
+    });
     return cfg;
   }
 
@@ -220,9 +250,10 @@
   }
 
   // ---------- Заявления «Детектора фейков» ----------
+  // Источник заявления: подпись поста. Иконку к ключу рисует игра (game.js → SRC_ICON)
   var SOURCES = {
-    social: '📱 В соцсетях пишут', movie: '🎬 В кино показывают', photo: '📸 Вирусное фото',
-    map: '🗺️ На обычной карте', rumor: '🗣️ Говорят', cartoon: '📺 В мультиках', think: '🤔 Многие думают'
+    social: 'В соцсетях пишут', movie: 'В кино показывают', photo: 'Вирусное фото',
+    map: 'На обычной карте', rumor: 'Говорят', cartoon: 'В мультиках', think: 'Многие думают'
   };
   var TRUE_RANGE = Math.log(1.06);
 
@@ -231,9 +262,10 @@
   function makeClaim(t, r, says, source, text, why, sources) {
     var k = says * r.value / t.value;
     var g0 = t.kind === 'country' ? Math.sqrt(k) : k;
+    var key = isStr(source) && (SOURCES[source] || (sources && isStr(sources[source]))) ? source : 'rumor';
     return {
       target: t, ref: r, says: says, text: text, why: why || '',
-      source: (sources && isStr(sources[source]) && sources[source]) || SOURCES[source] || SOURCES.rumor,
+      source: U.plain((sources && isStr(sources[key]) && sources[key]) || SOURCES[key]) || SOURCES.rumor, srcKey: key,
       g0: U.clamp(g0, 1 / 40, 40), isTrue: Math.abs(Math.log(g0)) <= TRUE_RANGE
     };
   }
@@ -328,7 +360,7 @@
       var stack = stackItem(p.pay, count);
       var t = pay.t * 1000;
       out.push({
-        uid: 'p' + i, task: true, isTrue: null, target: stack, ref: item, pay: p.pay, source: '💰 Цена в купюрах',
+        uid: 'p' + i, task: true, isTrue: null, target: stack, ref: item, pay: p.pay, source: 'Цена в купюрах', srcKey: 'money',
         ask: 'какой высоты стопка?',
         text: isStr(p.text) ? p.text : item.name + (/[иы]$/.test(item.name) ? ' стоят ' : ' стоит ') + U.fmt(p.price) + ' ₽. Какой высоты будет стопка ' + pay.of + '?',
         why: U.fmt(p.price) + ' ₽ ÷ ' + U.fmt(pay.rub) + ' ₽ = ' + U.fmt(count) + ' ' + U.plural(count, pay.forms) + '. ' +
