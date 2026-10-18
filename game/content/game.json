@@ -3,7 +3,6 @@
   "rounds": 8,
   "boss": [4, 8],
   "duelRounds": 5,
-  "timer": 20,
   "modes": { "chaos": true, "animals": true, "countries": true, "duel": true },
   "theme": { "animals": "#ffcf3d", "countries": "#63e6ff" },
   "texts": {

@@ -65,8 +65,6 @@
     swoosh: function () { tone(300, 0.22, 'sine', 0.07, 0, 1200); },
     boom: function () { tone(150, 0.55, 'sine', 0.4, 0, 42); noise(0.12, 0.12); },
     slam: function () { noise(0.15, 0.2); tone(110, 0.25, 'square', 0.08, 0, 55); },
-    beep: function (n) { tone(n === 1 ? 1320 : n === 2 ? 1100 : 880, 0.12, 'square', 0.08); },
-    buzzer: function () { tone(220, 0.45, 'sawtooth', 0.09, 0, 110); tone(233, 0.45, 'square', 0.04, 0, 116); },
     combo: function (n) {
       var base = 523 * Math.pow(1.122, Math.min(n, 8));
       [1, 1.26, 1.5, 2].forEach(function (k, i) { tone(base * k, 0.14, 'square', 0.06, i * 0.05); });

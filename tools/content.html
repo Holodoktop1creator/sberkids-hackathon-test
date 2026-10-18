@@ -125,7 +125,6 @@
     $('summary').innerHTML = e +
       '<div class="facts"><span>🐾 Зверей: <b>' + C.pools.animals.length + '</b></span><span>🌍 Стран: <b>' + C.pools.countries.length + '</b></span>' +
       '<span>Раундов: <b>' + cfg.rounds + '</b></span><span>Босс-раунды: <b>' + cfg.boss.join(', ') + '</b></span>' +
-      '<span>Таймер: <b>' + (cfg.timer ? cfg.timer + ' с' : 'выключен') + '</b></span>' +
       '<span>Режимы: <b>' + Object.keys(cfg.modes).filter(function (k) { return cfg.modes[k]; }).join(', ') + '</b></span></div>' +
       '<p>' + (ev ? 'Активное событие на эту дату: <span class="event">' + esc(ev.title) + '</span> ' + esc(ev.text || '') :
         '<span class="muted">На эту дату событий нет.</span>') + '</p>' +

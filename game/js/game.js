@@ -26,8 +26,7 @@
     record: 0,
     acc: [],
     last: null,
-    epoch: 0,        // меняется при новом раунде и выходе в меню — отменяет отложенные шаги
-    timedOut: []     // у кого в этом раунде вышло время
+    epoch: 0         // меняется при новом раунде и выходе в меню — отменяет отложенные шаги
   };
   var MERCATOR = ['greenland', 'canada', 'antarctica', 'africa'];
   var capyEnd = $('capy-end');
@@ -86,73 +85,6 @@
     ['btn-go', 'btn-minus', 'btn-plus'].forEach(function (id) { $(id).disabled = !on; });
   }
 
-  // ---------- Таймер хода ----------
-  // Секунды на ход — в content/game.json ("timer", 0 — без таймера).
-  // Когда время выходит, ответ фиксируется там, где ребёнок оставил силуэт.
-  var TM = { el: null, ring: null, num: null, total: 0, t0: 0, on: false, raf: 0, sec: -1 };
-  var RING_LEN = 2 * Math.PI * 22;
-  function tmTotal() { return S.content ? S.content.cfg.timer : 0; }
-  function tmDraw(left) {
-    var frac = TM.total ? left / (TM.total * 1000) : 0;
-    TM.ring.style.strokeDashoffset = (RING_LEN * (1 - frac)).toFixed(1);
-    var sec = Math.ceil(left / 1000);
-    if (sec === TM.sec) return;
-    TM.sec = sec;
-    TM.num.textContent = sec;
-    TM.el.setAttribute('data-lvl', sec > 10 ? 'ok' : sec > 6 ? 'mid' : sec > 3 ? 'low' : 'crit');
-    $('board').classList.toggle('hurry', TM.on && sec <= 3);
-    if (TM.on && sec <= 3 && sec > 0) {
-      restart(TM.el, 'beat');
-      App.sound.play('beep', sec);
-      if (sec === 3) App.bridge.vibrate();
-    }
-  }
-  function tmLoop() {
-    if (!TM.on) return;
-    var left = TM.total * 1000 - (performance.now() - TM.t0);
-    if (left <= 0) { tmDraw(0); tmStop(); timeUp(); return; }
-    tmDraw(left);
-    TM.raf = requestAnimationFrame(tmLoop);
-  }
-  function tmStop() {
-    TM.on = false;
-    cancelAnimationFrame(TM.raf);
-    $('board').classList.remove('hurry');
-    if (TM.el) TM.el.classList.remove('run', 'beat');
-  }
-  function tmReset() {
-    tmStop();
-    TM.total = tmTotal();
-    TM.el.hidden = !TM.total;
-    TM.sec = -1;
-    if (TM.total) tmDraw(TM.total * 1000);
-  }
-  function tmStart() {
-    tmReset();
-    if (!TM.total) return;
-    TM.on = true;
-    TM.t0 = performance.now();
-    TM.el.classList.add('run');
-    tmLoop();
-  }
-
-  function timeUp() {
-    if (S.phase !== 'play') return;
-    S.phase = 'timeup';
-    setControls(false);
-    B.enable(false);
-    clearTimeout(S.idleT);
-    B.demo(false, false); // демо не в счёт: остаётся размер, который поставил сам ребёнок
-    S.timedOut[S.turn - 1] = true;
-    App.sound.play('buzzer');
-    App.bridge.vibrate();
-    restart($('timeup'), 'show');
-    var ep = S.epoch;
-    U.wait(900).then(function () {
-      if (ep === S.epoch) lockIn(true);
-    });
-  }
-
   // ---------- Раунд ----------
   var ASK = { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', area: 'какая площадь?' };
   function askText(r) {
@@ -175,8 +107,6 @@
     var r = S.rounds[i];
     var ep = ++S.epoch;
     S.phase = 'intro';
-    S.timedOut = [];
-    tmReset();
     setControls(false);
     $('sheet').hidden = true;
     var k = $('kicker');
@@ -251,7 +181,6 @@
         if (ep === S.epoch && S.phase === 'play' && !S.touched) B.demo(true);
       }, 5000);
     }
-    tmStart();
   }
 
   function onBoardChange(g) {
@@ -277,11 +206,10 @@
     ['pointerup', 'pointerleave', 'pointercancel'].forEach(function (ev) { btn.addEventListener(ev, stop); });
   });
 
-  // Фиксация ответа: по кнопке или когда вышло время
-  function lockIn(byTimer) {
-    if (S.phase !== (byTimer ? 'timeup' : 'play')) return;
+  // Фиксация ответа
+  function lockIn() {
+    if (S.phase !== 'play') return;
     App.sound.play('lock');
-    tmStop();
     clearTimeout(S.idleT);
     B.demo(false);
     if (S.duel && S.turn === 1) {
@@ -292,7 +220,7 @@
     }
     reveal();
   }
-  $('btn-go').addEventListener('click', function () { lockIn(false); });
+  $('btn-go').addEventListener('click', lockIn);
 
   function askPass(player) {
     S.phase = 'pass';
@@ -379,7 +307,6 @@
       score: '+' + gained + (r.boss ? ' ×2' : ''),
       band: band(pts),
       rank: rankText(pts),
-      time: S.timedOut[0] ? '⏰ Время вышло — засчитали силуэт таким, каким он был' : '',
       ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>У тебя: ' + esc(lines.guess) + '<br>' + esc(lines.miss),
       factOf: r.target.fact ? r.target : r.ref,
       tip: tipFor(r, pts)
@@ -401,19 +328,12 @@
       score: p1 + ' : ' + p2,
       band: 3,
       rank: w === 0 ? 'Ничья! 🤝' : 'Игрок ' + w + ' ближе! 🏆',
-      time: timedOutText(),
       ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>Игрок 1: ' + esc(B.fmtVal(r.target, B.value(r.target, g1))) +
         ' · Игрок 2: ' + esc(B.fmtVal(r.target, B.value(r.target, g2))),
       factOf: r.target.fact ? r.target : r.ref,
       tip: tipFor(r, Math.max(p1, p2))
     });
     celebrate(Math.max(p1, p2));
-  }
-
-  function timedOutText() {
-    var who = [1, 2].filter(function (p) { return S.timedOut[p - 1]; });
-    if (!who.length) return '';
-    return '⏰ Время вышло: ' + who.map(function (p) { return 'Игрок ' + p; }).join(' и ');
   }
 
   function esc(s) {
@@ -443,7 +363,6 @@
     sc.textContent = o.score;
     sc.className = 'res-score s' + o.band + (S.duel ? ' duel' : '');
     $('res-rank').textContent = o.rank;
-    $('res-time').textContent = o.time;
     $('res-ratio').innerHTML = o.ratio;
     $('fact-name').textContent = o.factOf.name;
     $('res-fact').textContent = o.factOf.fact;
@@ -625,7 +544,6 @@
     App.sound.play('tap');
     S.epoch++;          // отменяем отложенные шаги текущего раунда
     S.phase = 'menu';
-    tmStop();
     clearTimeout(S.idleT);
     B.demo(false);
     B.enable(false);
@@ -693,7 +611,6 @@
       document.querySelector('[data-mode="chaos"]').disabled = !(a || k);
       $('btn-duel').disabled = !(a || k);
       $('load-error').hidden = a || k;
-      TM.el.hidden = !c.cfg.timer;
       applyLook(c);
     });
   }
@@ -748,21 +665,6 @@
     App.capy.mount($('capy-start'), 'idle');
     App.capy.wear($('capy-start'), ['orange']);
     B.init($('board'), onBoardChange);
-    TM.el = document.createElement('div');
-    TM.el.className = 'timer';
-    TM.el.setAttribute('data-lvl', 'ok');
-    TM.el.innerHTML = '<svg viewBox="0 0 52 52" aria-hidden="true"><circle class="tm-bg" cx="26" cy="26" r="22"/>' +
-      '<circle class="tm-ring" cx="26" cy="26" r="22"/></svg><b></b>';
-    TM.ring = TM.el.querySelector('.tm-ring');
-    TM.num = TM.el.querySelector('b');
-    TM.ring.style.strokeDasharray = RING_LEN.toFixed(1);
-    TM.el.hidden = true;
-    $('board').appendChild(TM.el);
-    var stamp = document.createElement('div');
-    stamp.className = 'timeup';
-    stamp.id = 'timeup';
-    stamp.textContent = '⏰ ВРЕМЯ!';
-    $('board').appendChild(stamp);
     syncSound();
     loadContent();
   }
