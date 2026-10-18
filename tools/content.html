@@ -128,12 +128,26 @@
       '<span>Режимы: <b>' + Object.keys(cfg.modes).filter(function (k) { return cfg.modes[k]; }).join(', ') + '</b></span></div>' +
       '<p>' + (ev ? 'Активное событие на эту дату: <span class="event">' + esc(ev.title) + '</span> ' + esc(ev.text || '') :
         '<span class="muted">На эту дату событий нет.</span>') + '</p>' +
-      '<p class="muted">Все события: ' + (cfg.events.length ? cfg.events.map(function (x) { return esc(x.title) + ' (' + x.from + ' — ' + x.to + ')'; }).join('; ') : 'нет') + '</p>';
+      '<p class="muted">Все события: ' + (cfg.events.length ? cfg.events.map(function (x) { return esc(x.title) + ' (' + x.from + ' — ' + x.to + ')'; }).join('; ') : 'нет') + '</p>' +
+      claimsHtml();
     renderGrid();
     var refSel = $('f-ref');
     var keep = refSel.value;
     refSel.innerHTML = C.pools.animals.map(function (a) { return '<option value="' + a.id + '">' + esc(a.name) + '</option>'; }).join('');
     refSel.value = keep || 'human';
+  }
+
+  // Заявления «Детектора фейков» из claims.json: вердикт и во сколько раз врёт стартовый силуэт
+  function claimsHtml() {
+    var all = C.claims.animals.concat(C.claims.countries);
+    var truths = all.filter(function (c) { return c.isTrue; }).length;
+    return '<h2 style="margin-top:14px">🕵️ Заявления: ' + all.length + ' (фейков ' + (all.length - truths) + ', правды ' + truths + ')</h2>' +
+      '<ul style="padding-left:18px;margin:0">' + all.map(function (c) {
+        var off = c.target.kind === 'country' ? c.g0 * c.g0 : c.g0;
+        var lie = off >= 1 ? 'преувеличивает в ' + U.fmtRatio(off) : 'преуменьшает в ' + U.fmtRatio(1 / off);
+        return '<li>' + (c.isTrue ? '✅ ПРАВДА' : '🕵️ ФЕЙК — ' + lie + ' раза') + ': «' + esc(c.text) + '» <span class="muted">(' +
+          esc(c.target.name) + ' / ' + esc(c.ref.name) + ')</span></li>';
+      }).join('') + '</ul>';
   }
 
   function renderGrid() {

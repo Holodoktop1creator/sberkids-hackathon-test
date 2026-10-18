@@ -28,7 +28,6 @@
     last: null,
     epoch: 0         // меняется при новом раунде и выходе в меню — отменяет отложенные шаги
   };
-  var MERCATOR = ['greenland', 'canada', 'antarctica', 'africa'];
   var capyEnd = $('capy-end');
 
   // ---------- Экраны ----------
@@ -93,13 +92,9 @@
     return typeof ask[key] === 'string' && ask[key] ? ask[key] : ASK[key];
   }
   function kickerText(r, i) {
-    if (r.boss) return '⚡ БОСС-РАУНД · очки ×2';
-    if (r.rematch) return '🔁 РЕВАНШ · новый эталон';
-    return (r.kind === 'countries' ? '🌍 ' : '🐾 ') + 'Раунд ' + (i + 1) + ' из ' + S.rounds.length;
-  }
-
-  function startG() {
-    return Math.random() < 0.5 ? U.rand(0.35, 0.65) : U.rand(1.55, 2.6);
+    if (r.boss) return '⚡ БОСС ×2 · ' + r.claim.source;
+    if (r.rematch) return '🔁 РЕВАНШ · ' + r.claim.source;
+    return r.claim.source + ' · ' + (i + 1) + '/' + S.rounds.length;
   }
 
   function playRound(i) {
@@ -112,12 +107,14 @@
     var k = $('kicker');
     k.textContent = kickerText(r, i);
     k.className = 'kicker' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
-    $('target').textContent = r.target.name;
-    restart($('target'), 'in');
-    $('ask').textContent = askText(r);
+    // громкое заявление, которое надо проверить
+    $('claim').textContent = '«' + r.claim.text.replace(/\.$/, '') + '»';
+    restart($('claim'), 'in');
+    $('ask').innerHTML = '🔎 Проверь: <b>' + esc(r.target.name) + '</b> — ' + esc(askText(r));
     $('board').classList.toggle('boss', !!r.boss);
     $('turn').hidden = true;
-    B.setRound(r, { start: startG() });
+    // белый силуэт стартует в размере, который обещает заявление
+    B.setRound(r, { start: r.claim.g0 });
     B.enable(false);
     updateHud();
     showIntro(r).then(function () {
@@ -129,7 +126,7 @@
 
   function showIntro(r) {
     var tag = $('intro-tag');
-    tag.textContent = r.boss ? '⚡ БОСС ×2 ⚡' : r.rematch ? '🔁 РЕВАНШ' : 'Раунд ' + (S.idx + 1);
+    tag.textContent = r.boss ? '⚡ БОСС ×2 · фейк или правда? ⚡' : r.rematch ? '🔁 РЕВАНШ' : '🕵️ Фейк или правда?';
     tag.className = 'intro-tag' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
     $('intro-a').textContent = r.target.name;
     $('intro-b').innerHTML = '';
@@ -246,6 +243,11 @@
     $('turn').hidden = true;
     if (S.duel) B.setTurn(-1, [true, true]);
     B.reveal();
+    var v = $('verdict');
+    var cl = S.rounds[S.idx].claim;
+    v.textContent = cl.isTrue ? '✅ ПРАВДА' : '🕵️ ФЕЙК!';
+    v.className = 'verdict ' + (cl.isTrue ? 'is-true' : 'is-fake');
+    restart(v, 'show');
     App.sound.play('slam');
     restart($('board'), 'shake');
     var ep = S.epoch;
@@ -267,17 +269,14 @@
     if (r.kind === 'countries') off = off * off;
     var miss = points(g) === 100 ? 'В точку! 🎯'
       : 'Промах: ' + (r.kind === 'countries' ? 'площадь' : 'размер') + ' в ' + U.fmtRatio(off) + ' раза ' + (g > 1 ? 'больше' : 'меньше');
-    return { truth: eq(k), guess: eq(gv), miss: miss };
+    return { truth: eq(k), guess: eq(gv), said: eq(r.claim.says), miss: miss };
   }
 
-  function tipFor(r, pts) {
-    var cfg = S.content.cfg;
-    if (r.kind === 'countries') {
-      if (MERCATOR.indexOf(r.target.id) >= 0 || MERCATOR.indexOf(r.ref.id) >= 0) return '🗺️ ' + (cfg.lessons.countries || '');
-      if (pts < 65) return '📐 ' + (cfg.lessons.area || U.pick(cfg.tips.countries));
-      return '';
-    }
-    return pts < 65 ? '💡 ' + U.pick(cfg.tips.animals) : '';
+  // Вердикт детектора: фейк раскрыт, если ребёнок подогнал силуэт близко к правде
+  function verdictHtml(r, pts) {
+    if (S.duel) return r.claim.isTrue ? '✅ <b>Это правда.</b>' : '🕵️ <b>Это фейк!</b>';
+    if (r.claim.isTrue) return '✅ <b>Это правда.</b> ' + (pts >= 65 ? 'Проверка пройдена 👏' : 'Не всё в сети — фейк 🙂');
+    return '🕵️ <b>Это фейк!</b> ' + (pts >= 65 ? 'Раскрыт 👏' : 'Он почти обманул — смотри правду 👇');
   }
 
   function soloResult() {
@@ -286,7 +285,7 @@
     var pts = points(g);
     var gained = pts * (r.boss ? 2 : 1);
     S.score += gained;
-    S.results[S.idx] = { pts: pts, gained: gained, round: r };
+    S.results[S.idx] = { pts: pts, gained: gained, round: r, isTrue: r.claim.isTrue, caught: pts >= 65 };
     S.combo = pts >= 65 ? S.combo + 1 : 0;
     S.bestCombo = Math.max(S.bestCombo, S.combo);
 
@@ -307,9 +306,9 @@
       score: '+' + gained + (r.boss ? ' ×2' : ''),
       band: band(pts),
       rank: rankText(pts),
-      ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>У тебя: ' + esc(lines.guess) + '<br>' + esc(lines.miss),
-      factOf: r.target.fact ? r.target : r.ref,
-      tip: tipFor(r, pts)
+      ratio: verdictHtml(r, pts) + '<br>На самом деле: <b>' + esc(lines.truth) + '</b>' +
+        (r.claim.isTrue ? '' : '<br>Фейк говорил: ' + esc(lines.said)) + '<br>У тебя: ' + esc(lines.guess),
+      round: r
     });
     celebrate(pts);
   }
@@ -328,10 +327,9 @@
       score: p1 + ' : ' + p2,
       band: 3,
       rank: w === 0 ? 'Ничья! 🤝' : 'Игрок ' + w + ' ближе! 🏆',
-      ratio: 'Правильно: <b>' + esc(lines.truth) + '</b><br>Игрок 1: ' + esc(B.fmtVal(r.target, B.value(r.target, g1))) +
-        ' · Игрок 2: ' + esc(B.fmtVal(r.target, B.value(r.target, g2))),
-      factOf: r.target.fact ? r.target : r.ref,
-      tip: tipFor(r, Math.max(p1, p2))
+      ratio: verdictHtml(r, 0) + '<br>На самом деле: <b>' + esc(lines.truth) + '</b><br>Игрок 1: ' +
+        esc(B.fmtVal(r.target, B.value(r.target, g1))) + ' · Игрок 2: ' + esc(B.fmtVal(r.target, B.value(r.target, g2))),
+      round: r
     });
     celebrate(Math.max(p1, p2));
   }
@@ -364,9 +362,12 @@
     sc.className = 'res-score s' + o.band + (S.duel ? ' duel' : '');
     $('res-rank').textContent = o.rank;
     $('res-ratio').innerHTML = o.ratio;
-    $('fact-name').textContent = o.factOf.name;
-    $('res-fact').textContent = o.factOf.fact;
-    $('res-tip').textContent = o.tip;
+    var cl = o.round.claim;
+    $('fact-title').textContent = cl.isTrue ? '✅ ПОЧЕМУ ПРАВДА' : '🕵️ ПОЧЕМУ ФЕЙК';
+    $('fact-name').textContent = o.round.target.name;
+    $('res-fact').textContent = cl.why || (cl.isTrue ? 'Заявление совпадает с настоящими размерами.' :
+      'Заявление сильно ошибается — сравни с эталоном выше. Громкие слова ещё не факт!');
+    $('res-tip').textContent = o.round.target.fact ? '🤯 ' + o.round.target.fact : '';
     $('btn-next').textContent = S.idx + 1 < S.rounds.length ? 'Дальше →' : 'Итоги 🏁';
     // сначала даём рассмотреть доску с ответом
     var ep = S.epoch;
@@ -407,7 +408,6 @@
     var unlocks = S.content.cfg.unlocks;
     unlocks.forEach(function (u) { if (norm >= u.score && S.acc.indexOf(u.id) < 0) S.acc.push(u.id); });
 
-    $('end-kicker').textContent = isRecord ? '🔥 Новый рекорд сессии!' : 'Итог';
     $('end-score').innerHTML = S.score + '<small> / ' + max + '</small>';
     $('end-title').textContent = title.emoji + ' ' + title.name;
     App.capy.mount(capyEnd, 'happy');
@@ -416,7 +416,17 @@
     $('end-grid').textContent = grid;
 
     var best = S.results.reduce(function (a, b) { return !a || b.pts > a.pts ? b : a; }, null);
-    $('end-best').innerHTML = '<h3>Лучшие моменты</h3><ul>' +
+    var fakes = S.results.filter(function (x) { return !x.isTrue; });
+    var truths = S.results.filter(function (x) { return x.isTrue; });
+    var caught = fakes.filter(function (x) { return x.caught; }).length;
+    var confirmed = truths.filter(function (x) { return x.caught; }).length;
+    function avg(list) { return list.length ? Math.round(list.reduce(function (a, b) { return a + b.pts; }, 0) / list.length) : 0; }
+    var early = avg(S.results.slice(0, 3)), late = avg(S.results.slice(-3));
+    $('end-kicker').textContent = isRecord ? '🔥 Новый рекорд сессии!' : 'Итог проверки';
+    $('end-best').innerHTML = '<h3>Детектор</h3><ul>' +
+      '<li>🕵️ Раскрыто фейков: <b>' + caught + ' из ' + fakes.length + '</b></li>' +
+      (truths.length ? '<li>✅ Правда подтверждена: <b>' + confirmed + ' из ' + truths.length + '</b></li>' : '') +
+      (S.results.length >= 6 ? '<li>📈 Точность прикидки: в начале ' + early + '%, в конце ' + late + '%' + (late >= early + 10 ? ' — прогресс! 🚀' : '') + '</li>' : '') +
       (best ? '<li>🎯 ' + esc(best.round.target.name) + ' vs ' + esc(best.round.ref.name) + ' — ' + best.pts + ' ' + U.plural(best.pts, ['очко', 'очка', 'очков']) + '</li>' : '') +
       (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') +
       '</ul>';
@@ -432,6 +442,7 @@
     S.rounds.forEach(function (r) { kinds[r.kind] = true; });
     var L = S.content.cfg.lessons;
     var lessons = [];
+    if (L.detector) lessons.push('🕵️ ' + L.detector);
     if (kinds.animals && L.animals) lessons.push('🐾 ' + L.animals);
     if (kinds.countries && L.countries) lessons.push('🗺️ ' + L.countries);
     if (kinds.countries && L.area) lessons.push('📐 ' + L.area);
@@ -443,7 +454,7 @@
     App.sound.play('win');
     App.bridge.finish();
     App.bridge.completed();
-    S.last = { score: S.score, max: max, title: title, grid: grid };
+    S.last = { score: S.score, max: max, title: title, grid: grid, caught: caught, fakes: fakes.length };
   }
 
   function endDuel() {
@@ -499,9 +510,9 @@
   $('btn-share').addEventListener('click', function () {
     var r = S.last;
     if (!r) return;
-    doShare('Мой результат в «Прикинь!» в СберKids: ' + r.score + ' из ' + r.max + ' — «' + r.title.name + '» ' + r.grid +
+    doShare('Детектор фейков «Прикинь!» в СберKids: раскрыто ' + r.caught + ' из ' + r.fakes + ' фейков, ' + r.score + ' из ' + r.max + ' очков — «' + r.title.name + '» ' + r.grid +
       '\n' + S.content.cfg.texts.share, {
-      kicker: 'Звери и страны: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name,
+      kicker: 'Детектор фейков: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name + ' · 🕵️ ' + r.caught + '/' + r.fakes,
       grid: r.grid, capy: { acc: S.acc, mood: 'happy' }, footer: S.content.cfg.texts.share
     });
   });
@@ -665,6 +676,10 @@
     App.capy.mount($('capy-start'), 'idle');
     App.capy.wear($('capy-start'), ['orange']);
     B.init($('board'), onBoardChange);
+    var verdict = document.createElement('div');
+    verdict.id = 'verdict';
+    verdict.className = 'verdict';
+    $('board').appendChild(verdict);
     syncSound();
     loadContent();
   }

@@ -241,8 +241,12 @@
   }
 
   // Векторный силуэт красится стилями, картинка-файл — заранее перекрашенными слоями
+  // Догадка рисуется в два слоя: толстая обводка снизу, заливка сверху —
+  // так у континентов не видно внутренних границ стран, остаётся только внешний контур
   function shapeOf(item, which) {
-    return item.layers ? App.assets.layer(item, which) : item.markup;
+    if (item.layers) return App.assets.layer(item, which);
+    if (which === 'g1' || which === 'g2') return '<g class="ol">' + item.markup + '</g><g class="fl">' + item.markup + '</g>';
+    return item.markup;
   }
 
   function setRound(round, opts) {

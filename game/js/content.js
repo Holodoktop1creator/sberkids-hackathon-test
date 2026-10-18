@@ -22,13 +22,12 @@
     ],
     titles: [{ min: 0, name: 'Прикидчик', emoji: '🧮' }],
     unlocks: [],
-    tips: { animals: ['Считай эталонами: сколько раз чёрный силуэт поместится в белом?'], countries: ['Площадь растёт быстрее размера: вдвое шире — в 4 раза больше!'] },
     lessons: {},
     modes: { chaos: true, animals: true, countries: true, duel: true },
     theme: { animals: '#ffcf3d', countries: '#63e6ff' },
     texts: {
-      tagline: 'Звери и страны. Растяни силуэт\nдо **настоящего** размера!',
-      capy: ['Йо! Я Капи. Сколько капибар в ките? 🤔'],
+      tagline: 'Фейк или правда? Растяни силуэт\nдо **настоящего** размера!',
+      capy: ['Йо! Я Капи — детектор фейков 🕵️'],
       share: 'Сможешь прикинуть точнее? 😏',
       ask: { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', area: 'какая площадь?' }
     },
@@ -139,7 +138,7 @@
     function safe(name) {
       return getJSON(base + name).catch(function (e) { errors.push('Файл ' + name + ' не загрузился (' + e.message + ')'); return null; });
     }
-    return Promise.all([safe('game.json'), safe('animals.json'), safe('countries.json'), safe('items.json')]).then(function (res) {
+    return Promise.all([safe('game.json'), safe('animals.json'), safe('countries.json'), safe('items.json'), safe('claims.json')]).then(function (res) {
       var cfg = config(res[0]);
       var extra = res[3] && typeof res[3] === 'object' ? res[3] : {};
       var hidden = Array.isArray(extra.hidden) ? extra.hidden : [];
@@ -168,6 +167,7 @@
           errors: errors
         };
         checkTraps(content);
+        content.claims = buildClaims(res[4], content);
         return content;
       });
     });
@@ -190,6 +190,73 @@
         });
       });
     });
+  }
+
+  // ---------- Заявления «Детектора фейков» ----------
+  var SOURCES = {
+    social: '📱 В соцсетях пишут', movie: '🎬 В кино показывают', photo: '📸 Вирусное фото',
+    map: '🗺️ На обычной карте', rumor: '🗣️ Говорят', cartoon: '📺 В мультиках'
+  };
+  var TRUE_RANGE = Math.log(1.06);
+
+  // says — во сколько раз цель больше эталона «по словам» заявления.
+  // Отсюда стартовый размер белого силуэта: ребёнок видит ровно то, что обещает фейк.
+  function makeClaim(t, r, says, source, text, why, sources) {
+    var k = says * r.value / t.value;
+    var g0 = t.kind === 'country' ? Math.sqrt(k) : k;
+    return {
+      target: t, ref: r, says: says, text: text, why: why || '',
+      source: (sources && isStr(sources[source]) && sources[source]) || SOURCES[source] || SOURCES.rumor,
+      g0: U.clamp(g0, 0.12, 8), isTrue: Math.abs(Math.log(g0)) <= TRUE_RANGE
+    };
+  }
+
+  function buildClaims(raw, content) {
+    var out = { animals: [], countries: [] };
+    if (!raw || !Array.isArray(raw.claims)) return out;
+    var sources = raw.sources && typeof raw.sources === 'object' ? raw.sources : {};
+    raw.claims.forEach(function (c, i) {
+      var kind = null, t = null, r = null;
+      ['animals', 'countries'].forEach(function (k) {
+        var a = byId(content.pools[k], c && c.target), b = byId(content.pools[k], c && c.ref);
+        if (a && b && a !== b) { kind = k; t = a; r = b; }
+      });
+      if (!kind || !isNum(c.says) || !isStr(c.text)) {
+        content.errors.push('Заявление №' + (i + 1) + ' с ошибкой: ' + (c && c.text ? c.text : JSON.stringify(c).slice(0, 60)));
+        return;
+      }
+      var cl = makeClaim(t, r, c.says, c.source, c.text, c.why, sources);
+      cl.uid = 'c' + i;
+      out[kind].push(cl);
+    });
+    return out;
+  }
+
+  function razWord(x) {
+    if (U.fmtRatio(x).indexOf(',') >= 0) return 'раза';
+    return U.plural(Math.round(x), ['раз', 'раза', 'раз']);
+  }
+  function lowerName(it) { return it.kind === 'country' ? it.name : it.name.charAt(0).toLowerCase() + it.name.slice(1); }
+
+  // Заявление для любой пары: иногда правда, чаще враньё в 1,6–2,6 раза
+  function autoClaim(p, kind, forceFake) {
+    var t = p.target, r = p.ref;
+    var k = t.value / r.value;
+    var isTrue = !forceFake && Math.random() < 0.25;
+    var says = k;
+    if (!isTrue) {
+      var lin = Math.random() < 0.5 ? U.rand(0.4, 0.62) : U.rand(1.6, 2.6);
+      says = k * (kind === 'countries' ? lin * lin : lin);
+    }
+    var bigger = says >= 1;
+    var x = bigger ? says : 1 / says;
+    x = x >= 10 ? Math.round(x) : Math.round(x * 10) / 10;
+    says = bigger ? x : 1 / x;
+    var area = kind === 'countries';
+    var text = x === 1
+      ? t.name + ' и ' + lowerName(r) + (area ? ' одинаковые по площади.' : ' — одного размера.')
+      : t.name + (area ? ' по площади' : '') + ' в ' + U.fmtRatio(x) + ' ' + razWord(x) + (bigger ? ' больше' : ' меньше') + ', чем ' + lowerName(r) + '.';
+    return makeClaim(t, r, says, 'rumor', text, '');
   }
 
   // Случайная пара, где цель больше или меньше эталона в разумное число раз
@@ -231,14 +298,30 @@
       var only = mode === 'countries' && has.countries ? 'countries' : has.animals ? 'animals' : 'countries';
       for (var j = 0; j < n; j++) kinds.push(only);
     }
-    var used = {};
+    var used = {}, usedClaims = {};
     var out = [];
+    var claims = content.claims || { animals: [], countries: [] };
+    var eventBoss = !!(content.event && content.event.traps);
     kinds.forEach(function (kind, idx) {
       var isBoss = (boss || []).indexOf(idx + 1) >= 0;
-      var p = (isBoss || Math.random() < 0.35) ? trapPair(content, kind, used, isBoss) : null;
+      var p = null;
+      // во время события босс-раунд берёт пару из события
+      if (isBoss && eventBoss) p = trapPair(content, kind, used, true);
+      // готовые заявления из claims.json; на босс-раунде — только фейки
+      if (!p) {
+        var pool = claims[kind].filter(function (c) {
+          return !usedClaims[c.uid] && !used[c.target.id] && (!isBoss || !c.isTrue);
+        });
+        if (pool.length && (isBoss || Math.random() < 0.8)) {
+          var c = U.pick(pool);
+          usedClaims[c.uid] = true;
+          p = { target: c.target, ref: c.ref, claim: c };
+        }
+      }
       if (!p) p = randomPair(content.pools[kind], content.cfg.ratio[kind] || [1.2, 15], used);
       if (!p) p = trapPair(content, kind, used, false);
       if (!p) return;
+      if (!p.claim) p.claim = autoClaim(p, kind, isBoss);
       used[p.target.id] = true;
       p.kind = kind;
       p.boss = isBoss;
@@ -257,6 +340,7 @@
     if (!p || p.ref.id === round.ref.id) return null;
     p.kind = round.kind;
     p.rematch = true;
+    p.claim = autoClaim(p, round.kind, false);
     return p;
   }
 
