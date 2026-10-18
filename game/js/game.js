@@ -102,9 +102,11 @@
   // ---------- Раунд ----------
   var ASK = { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', diam: 'какой диаметр?', area: 'какая площадь?' };
   // иконка в «аватарке» поста: откуда пришло заявление
-  var SRC_ICON = { social: 'chat', movie: 'film', photo: 'camera', map: 'map', rumor: 'rumor', cartoon: 'tv', think: 'bulb', money: 'cash' };
+  var SRC_ICON = { social: 'chat', movie: 'film', photo: 'camera', map: 'map', rumor: 'rumor', cartoon: 'tv', think: 'bulb', ad: 'tag', friend: 'duel' };
+  var P = App.content.price;
   function askText(r) {
-    if (r.claim && r.claim.ask) return r.claim.ask;
+    // в ценах — «сколько это мороженых?»: цена вещи и эталона видна на ценниках под столбиками
+    if (r.kind === 'prices') return 'сколько это ' + r.ref.forms[2] + '?';
     var ask = S.content.cfg.texts.ask || {};
     var key = r.kind === 'countries' ? 'area' : r.target.dim;
     return typeof ask[key] === 'string' && ask[key] ? ask[key] : ASK[key];
@@ -127,11 +129,9 @@
     postHead(r, i);
     // громкое заявление, которое надо проверить
     var text = U.plain(r.claim.text);
-    $('claim').textContent = r.claim.task ? text : '«' + text.replace(/\.$/, '') + '»';
+    $('claim').textContent = '«' + text.replace(/\.$/, '') + '»';
     restart($('claim'), 'in');
-    $('ask').innerHTML = ic('search') + '<span>' + (r.claim.task
-      ? 'Растяни <b>' + esc(r.target.acc || r.target.name.toLowerCase()) + '</b> до нужной высоты'
-      : 'Проверь: <b>' + esc(r.target.name) + '</b> — ' + esc(askText(r))) + '</span>';
+    $('ask').innerHTML = ic('search') + '<span>Проверь: <b>' + esc(r.target.name) + '</b> — ' + esc(askText(r)) + '</span>';
     $('board').classList.toggle('boss', !!r.boss);
     $('board').classList.remove('scanning');
     $('turn').hidden = true;
@@ -158,7 +158,7 @@
     var sm = document.createElement('small');
     sm.textContent = 'эталон';
     $('intro-b').appendChild(sm);
-    $('intro-q').textContent = r.claim.task ? 'Сколько это в деньгах?' : 'Фейк или правда?';
+    $('intro-q').textContent = 'Фейк или правда?';
     ov.hidden = false;
     // перезапуск анимаций
     Array.prototype.forEach.call(ov.children, function (c) { c.style.animation = 'none'; void c.offsetWidth; c.style.animation = ''; });
@@ -279,13 +279,13 @@
       if (ep !== S.epoch) return null;
       B.reveal();
       var v = $('verdict');
-      v.textContent = cl.task ? U.fmtLen(r.target.value) : cl.isTrue ? 'ПРАВДА' : 'ФЕЙК';
-      v.className = 'verdict ' + (cl.task ? 'is-calc' : cl.isTrue ? 'is-true' : 'is-fake');
+      v.textContent = cl.isTrue ? 'ПРАВДА' : 'ФЕЙК';
+      v.className = 'verdict ' + (cl.isTrue ? 'is-true' : 'is-fake');
       restart(v, 'show');
       App.sound.play('slam');
       restart(board, 'shake');
       var br = board.getBoundingClientRect();
-      App.fx.ring(br.left + br.width / 2, br.top + br.height * 0.42, cl.task ? C.violet : cl.isTrue ? C.green : C.red, Math.min(br.width, 300) * 0.55, 6);
+      App.fx.ring(br.left + br.width / 2, br.top + br.height * 0.42, cl.isTrue ? C.green : C.red, Math.min(br.width, 300) * 0.55, 6);
       return U.wait(450);
     }).then(function () {
       if (ep !== S.epoch) return;
@@ -294,16 +294,16 @@
   }
 
   function ratio(x) { return (x < 1 ? U.dec(x, 2) : U.fmtRatio(x)) + ' ×'; }
-  // всегда «большее = N × меньшее» по настоящим размерам
+  // всегда «большее = N × меньшее» по настоящим размерам; в ценах — «Самокат = 40 мороженых»
   function equation(r) {
     var t = r.target, ref = r.ref, k = t.value / ref.value;
+    if (r.kind === 'prices') return t.name + (Math.abs(P.round(k) - k) > k * 0.01 ? ' ≈ ' : ' = ') + P.count(k, ref);
     return k < 1 ? ref.name + ' = ' + U.fmtRatio(1 / k) + ' × ' + t.name : t.name + ' = ' + U.fmtRatio(k) + ' × ' + ref.name;
   }
   function ratioLines(r, g) {
     var t = r.target, ref = r.ref;
-    if (r.claim.task) {
-      // в задаче про деньги считаем в сантиметрах, а не «во сколько раз»
-      return { truth: t.name + ' — ' + U.fmtLen(t.value), guess: U.fmtLen(B.value(t, g)), said: '', eq: '' };
+    if (r.kind === 'prices') {
+      return { truth: equation(r), guess: P.count(B.value(t, g) / ref.value, ref), said: P.count(r.claim.says, ref), eq: '' };
     }
     var k = t.value / ref.value;
     var gv = B.value(t, g) / ref.value;
@@ -312,9 +312,10 @@
     return { truth: equation(r), guess: ratio(side(gv)), said: ratio(side(r.claim.says)), eq: '' };
   }
 
-  // Значки в ряд: целые и обрезанный последний; больше max — один значок = 10, 100…
+  // Значки в ряд: целые и обрезанный последний; больше max — один значок = 2, 5, 10, 20…
   function unitRow(n, max, one, w) {
-    var per = n > max ? Math.pow(10, Math.ceil(Math.log(n / max) / Math.LN10)) : 1;
+    var per = 1, k = 0;
+    while (n / per > max) { k++; per = [1, 2, 5][k % 3] * Math.pow(10, Math.floor(k / 3)); }
     var m = n / per, whole = Math.floor(m + 1e-9), frac = m - whole;
     var icons = '';
     for (var i = 0; i < whole; i++) icons += '<i class="u" style="animation-delay:' + (0.25 + i * 0.045).toFixed(2) + 's">' + one + '</i>';
@@ -324,37 +325,44 @@
   }
 
   // «Сколько раз помещается»: меньший предмет значками в ряд — умножение видно глазами.
-  // Работает для любой пары: по длине, росту и площади. В деньгах значки — купюры или монеты.
+  // Работает для любой пары: по длине, росту и площади. В ценах значки — понятная единица:
+  // 40 мороженых рядами по десять, чтобы их было видно поштучно.
   function unitsHtml(r) {
     var cfg = S.content.cfg.units;
     if (!cfg.show) return '';
-    if (r.claim.task) {
-      var pay = App.content.PAY[r.claim.pay];
-      var count = Math.round(r.target.value / pay.t);
-      var coin = pay.t > 0.0005;
-      var row = unitRow(count, cfg.max, '<svg class="ic u-ic u-money"><use href="#i-' + (coin ? 'coin' : 'cash') + '"/></svg>', 28);
-      var word = function (x) { return U.plural(x, pay.forms); };
-      return '<div class="u-eq">Это ' + U.fmt(count) + ' ' + word(count) + ' по ' + U.fmt(pay.rub) + ' ₽</div>' +
-        '<div class="units"><div class="u-row">' + row.icons + '</div><b class="u-n">' + U.fmt(count) + '</b></div>' +
-        (row.per > 1 ? '<div class="u-note">Один значок = ' + U.fmt(row.per) + ' ' + word(row.per) + '</div>' : '');
-    }
+    var price = r.kind === 'prices';
     var k = r.target.value / r.ref.value;
-    var small = k >= 1 ? r.ref : r.target;
-    var n = k >= 1 ? k : 1 / k;
-    var h = 28, w = Math.round(U.clamp(h * small.vb[2] / small.vb[3], 16, 56));
+    var small = k >= 1 || price ? r.ref : r.target;
+    var n = k >= 1 || price ? k : 1 / k;
+    var a = small.vb[2] / small.vb[3];
+    // в ценах значки вписаны в квадрат 22 px — десять штук встают в один ряд
+    var h = price ? (a > 1 ? 22 / a : 22) : 28, w = Math.round(price ? Math.max(10, Math.min(22, 22 * a)) : U.clamp(h * a, 16, 56));
     var inner = small.layers ? App.assets.layer(small, 'ref') : '<g fill="currentColor">' + small.markup + '</g>';
     // силуэт один раз в symbol, дальше — ссылки: у стран контуры по несколько КБ
     var html = '<svg class="u-defs" aria-hidden="true"><symbol id="u-sym" viewBox="' + small.vb.join(' ') + '" preserveAspectRatio="xMidYMid meet">' + inner + '</symbol></svg>';
-    var row = unitRow(n, cfg.max, '<svg class="u-ic" style="width:' + w + 'px;height:' + h + 'px"><use href="#u-sym"/></svg>', w);
-    return html + '<div class="units"><div class="u-row">' + row.icons + '</div>' +
-      '<b class="u-n">' + U.fmtRatio(n) + ' ×</b></div>' +
-      (row.per > 1 ? '<div class="u-note">Один значок = ' + U.fmt(row.per) + ' × ' + esc(small.name) + '</div>' : '');
+    var row = unitRow(n, price ? 50 : cfg.max, '<svg class="u-ic" style="width:' + w + 'px;height:' + Math.round(h) + 'px"><use href="#u-sym"/></svg>', w);
+    var rowAttr = price ? ' class="u-row tens" style="max-width:' + (w * 10 + 46) + 'px"' : ' class="u-row"';
+    return html + '<div class="units"><div' + rowAttr + '>' + row.icons + '</div>' +
+      '<b class="u-n">' + (price ? U.fmtRatio(P.round(n)) : U.fmtRatio(n) + ' ×') + '</b></div>' +
+      (row.per > 1 ? '<div class="u-note">Один значок = ' + esc(price ? P.count(row.per, small) : U.fmt(row.per) + ' × ' + small.name) + '</div>' : '');
+  }
+
+  // Почему фейк: в ценах — расчёт «4 000 ₽ ÷ 100 ₽ = 40 мороженых», а потом пояснение из заявления
+  function whyText(r) {
+    var cl = r.claim, why = U.plain(cl.why);
+    if (r.kind === 'prices') {
+      var t = r.target, u = r.ref, k = t.value / u.value;
+      var calc = U.fmt(t.value) + ' ₽ ÷ ' + U.fmt(u.value) + ' ₽ ' + (Math.abs(P.round(k) - k) > k * 0.01 ? '≈' : '=') + ' ' +
+        P.count(k, u) + (cl.isTrue ? ' — всё сходится.' : ', а не ' + U.fmtRatio(P.round(cl.says)) + '.');
+      return calc + (why ? ' ' + why : '');
+    }
+    return why || (cl.isTrue ? 'Заявление совпадает с настоящими размерами.' :
+      'Заявление сильно ошибается — сравни с эталоном. Громкие слова ещё не факт.');
   }
 
   // Вердикт детектора: фейк раскрыт, если ребёнок подогнал силуэт близко к правде
   function verdictInfo(r, pts) {
     var cl = r.claim;
-    if (cl.task) return { badge: 'Расчёт', cls: 'is-calc', sub: S.duel ? 'Сколько это в купюрах' : pts >= 65 ? 'Прикинуто верно' : 'Смотри расчёт ниже' };
     if (cl.isTrue) return { badge: 'Правда', cls: 'is-true', sub: S.duel ? 'Заявление верное' : pts >= 65 ? 'Проверка пройдена' : 'Не всё в сети — фейк' };
     return { badge: 'Фейк', cls: 'is-fake', sub: S.duel ? 'Заявление врёт' : pts >= 65 ? 'Фейк раскрыт' : 'Фейк почти прошёл — смотри правду' };
   }
@@ -365,7 +373,7 @@
     var pts = points(g);
     var gained = pts * (r.boss ? 2 : 1);
     S.score += gained;
-    S.results[S.idx] = { pts: pts, gained: gained, round: r, isTrue: r.claim.isTrue, task: !!r.claim.task, caught: pts >= 65 };
+    S.results[S.idx] = { pts: pts, gained: gained, round: r, isTrue: r.claim.isTrue, caught: pts >= 65 };
     S.combo = pts >= 65 ? S.combo + 1 : 0;
     S.bestCombo = Math.max(S.bestCombo, S.combo);
 
@@ -374,7 +382,7 @@
     if (pts < 40 && !r.rematch && rematches < 2) {
       for (var j = S.idx + 2; j < S.rounds.length; j++) {
         if (!S.rounds[j].boss && !S.rounds[j].rematch) {
-          var rm = App.content.rematch(S.content, r, S.rounds);
+          var rm = App.content.rematch(S.content, r);
           if (rm) S.rounds[j] = rm;
           break;
         }
@@ -383,7 +391,7 @@
 
     var lines = ratioLines(r, g);
     var cells = [];
-    if (!r.claim.isTrue && !r.claim.task) cells.push({ cls: 'said', k: 'В заявлении', v: lines.said });
+    if (!r.claim.isTrue) cells.push({ cls: 'said', k: 'В заявлении', v: lines.said });
     cells.push({ cls: 'mine', k: 'Твой ответ', v: lines.guess });
     openSheet({
       score: gained,
@@ -409,14 +417,14 @@
     S.duelMarks[S.idx] = w;
     var info = verdictInfo(r, 0);
     info.sub = w === 0 ? 'Ничья в этом раунде' : 'Ближе к правде — Игрок ' + w;
-    var t = r.target;
+    var t = r.target, price = r.kind === 'prices';
     openSheet({
       scoreHtml: p1 + ' : <span class="p2">' + p2 + '</span>',
       band: 3,
       rank: '',
       info: info,
-      truth: t.name + ' — ' + B.fmtVal(t, t.value),
-      eq: r.claim.task ? '' : equation(r),
+      truth: price ? equation(r) : t.name + ' — ' + B.fmtVal(t, t.value),
+      eq: price ? '' : equation(r),
       cells: [
         { cls: 'mine', k: 'Игрок 1', v: B.fmtVal(t, B.value(t, g1)) },
         { cls: 'p2', k: 'Игрок 2', v: B.fmtVal(t, B.value(t, g2)) }
@@ -460,20 +468,27 @@
     sc.className = 'res-score s' + o.band + (S.duel ? ' duel' : '');
     sc.textContent = '';
     $('res-rank').textContent = o.rank;
+    // в ценах сразу под правдой — «= почти 2 месяца без мороженого»: сколько копить
+    var save = o.round.kind === 'prices' ? P.saving(o.round.target, o.round.ref) : null;
     $('res-rows').innerHTML = '<div class="res-truth"><span>На самом деле</span><b>' + esc(o.truth) + '</b>' +
-      (o.eq ? '<div class="u-eq">' + esc(o.eq) + '</div>' : '') + unitsHtml(o.round) + '</div>' +
+      (o.eq ? '<div class="u-eq">' + esc(o.eq) + '</div>' : '') +
+      (save ? '<div class="u-save">' + ic('piggy') + esc(save.line) + '</div>' : '') + unitsHtml(o.round) + '</div>' +
       '<div class="res-pair">' + o.cells.map(function (c) {
         return '<div class="res-cell ' + c.cls + '"><span>' + esc(c.k) + '</span><b>' + esc(c.v) + '</b></div>';
       }).join('') + '</div>';
     $('res-fact-box').className = 'res-box res-fact ' + o.info.cls;
-    $('fact-ic').innerHTML = ic(cl.task ? 'calc' : cl.isTrue ? 'shield' : 'search');
-    $('fact-title').textContent = cl.task ? 'Как посчитать' : cl.isTrue ? 'Почему правда' : 'Почему фейк';
-    $('fact-name').textContent = cl.task ? o.round.ref.name : o.round.target.name;
-    $('res-fact').textContent = U.plain(cl.why) || (cl.isTrue ? 'Заявление совпадает с настоящими размерами.' :
-      'Заявление сильно ошибается — сравни с эталоном. Громкие слова ещё не факт.');
+    $('fact-ic').innerHTML = ic(cl.isTrue ? 'shield' : 'search');
+    $('fact-title').textContent = cl.isTrue ? 'Почему правда' : 'Почему фейк';
+    $('fact-name').textContent = o.round.target.name;
+    $('res-fact').textContent = whyText(o.round);
+    // «Копилка» в ценах: сколько недель копить, если не покупать единицу; дальше — совет из факта
     var fact = U.plain(o.round.target.fact);
-    $('res-tip-box').hidden = !fact;
-    $('res-tip').textContent = fact;
+    var tip = save ? save.text + (fact ? ' ' + fact : '') : fact;
+    $('tip-ic').innerHTML = ic(save ? 'piggy' : 'bulb');
+    $('tip-title').textContent = save ? 'Копилка' : 'Факт';
+    $('res-tip-box').className = 'res-box res-tip' + (save ? ' is-save' : '');
+    $('res-tip-box').hidden = !tip;
+    $('res-tip').textContent = tip;
     $('btn-next').querySelector('span').textContent = S.idx + 1 < S.rounds.length ? 'Дальше' : 'Итоги';
     // сначала даём рассмотреть доску с ответом
     var ep = S.epoch;
@@ -510,7 +525,7 @@
     return list.map(function (cls, i) { return '<i class="' + cls + '" style="animation-delay:' + (0.25 + i * 0.05).toFixed(2) + 's"></i>'; }).join('');
   }
 
-  var LESSON_ICON = { detector: 'search', animals: 'paw', countries: 'map', area: 'ruler', money: 'cash' };
+  var LESSON_ICON = { detector: 'search', animals: 'paw', countries: 'map', area: 'ruler', prices: 'piggy' };
 
   function endSolo() {
     S.phase = 'end';
@@ -534,25 +549,25 @@
     var grid = S.results.map(function (x) { return shareSquare(x.pts); }).join('');
 
     var best = S.results.reduce(function (a, b) { return !a || b.pts > a.pts ? b : a; }, null);
-    var fakes = S.results.filter(function (x) { return !x.isTrue && !x.task; });
+    var fakes = S.results.filter(function (x) { return !x.isTrue; });
     var truths = S.results.filter(function (x) { return x.isTrue; });
-    var tasks = S.results.filter(function (x) { return x.task; });
+    var priced = S.results.filter(function (x) { return x.round.kind === 'prices'; });
     var caught = fakes.filter(function (x) { return x.caught; }).length;
     var confirmed = truths.filter(function (x) { return x.caught; }).length;
-    var counted = tasks.filter(function (x) { return x.caught; }).length;
+    var counted = priced.filter(function (x) { return x.caught; }).length;
     function avg(list) { return list.length ? Math.round(list.reduce(function (a, b) { return a + b.pts; }, 0) / list.length) : 0; }
     var early = avg(S.results.slice(0, 3)), late = avg(S.results.slice(-3));
     var grew = late >= early + 10;
     var kicker = $('end-kicker');
     kicker.textContent = isRecord ? 'Новый рекорд сессии' : 'Итог проверки';
     kicker.className = 'end-kicker' + (isRecord ? ' record' : '');
-    $('end-best').innerHTML = '<h3>' + (fakes.length || truths.length ? 'Детектор' : 'Финансы') + '</h3><ul>' +
+    $('end-best').innerHTML = '<h3>Детектор</h3><ul>' +
       (fakes.length ? li('search', 'Фейков раскрыто', caught + ' из ' + fakes.length, caught === fakes.length ? 'good' : '') : '') +
       (truths.length ? li('shield', 'Правда подтверждена', confirmed + ' из ' + truths.length, confirmed === truths.length ? 'good' : '') : '') +
-      (tasks.length ? li('cash', 'Цены в купюрах прикинуты', counted + ' из ' + tasks.length, counted === tasks.length ? 'good' : '') : '') +
+      (priced.length ? li('piggy', 'Цены прикинуты', counted + ' из ' + priced.length, counted === priced.length ? 'good' : '') : '') +
       (S.results.length >= 6 ? li('trend', 'Точность прикидки', early + '% → ' + late + '%', grew ? 'good' : '',
         grew ? 'Есть прогресс: первые три раунда против последних' : 'Первые три раунда против последних') : '') +
-      (best ? li('target', esc(best.task ? best.round.ref.name + ' → ' + best.round.target.name.toLowerCase() : best.round.target.name + ' и ' + best.round.ref.name),
+      (best ? li('target', esc(best.round.target.name + ' и ' + best.round.ref.name),
         best.pts + ' ' + pointsWord(best.pts), '', 'Лучший раунд') : '') +
       (S.bestCombo >= 2 ? li('bolt', 'Лучшая серия', S.bestCombo + ' подряд') : '') +
       '</ul>';
@@ -570,11 +585,11 @@
     S.rounds.forEach(function (r) { kinds[r.kind] = true; });
     var L = S.content.cfg.lessons;
     var lessons = [];
-    if (L.detector && (kinds.animals || kinds.countries)) lessons.push('detector');
+    if (L.detector) lessons.push('detector');
     if (kinds.animals && L.animals) lessons.push('animals');
     if (kinds.countries && L.countries) lessons.push('countries');
     if (kinds.countries && L.area) lessons.push('area');
-    if (kinds.money && L.money) lessons.push('money');
+    if (kinds.prices && L.prices) lessons.push('prices');
     $('end-lessons').hidden = !lessons.length;
     $('end-lessons').innerHTML = '<h3>Что теперь знаешь</h3><ul>' + lessons.map(function (k) {
       return '<li class="lesson">' + ic(LESSON_ICON[k]) + '<span class="lbl">' + esc(L[k]) + '</span></li>';
@@ -587,7 +602,7 @@
     App.bridge.finish();
     App.bridge.completed();
     S.last = {
-      score: S.score, max: max, title: title, grid: grid, caught: caught, fakes: fakes.length, counted: counted, tasks: tasks.length,
+      score: S.score, max: max, title: title, grid: grid, caught: caught, fakes: fakes.length, confirmed: confirmed, truths: truths.length,
       marks: S.results.map(function (x) { return { color: BAND_COLOR[band(x.pts)], boss: !!x.round.boss }; })
     };
   }
@@ -646,7 +661,7 @@
     var r = S.last;
     if (!r) return;
     var share = S.content.cfg.texts.share;
-    var stat = r.fakes ? 'Фейков раскрыто: ' + r.caught + ' из ' + r.fakes : 'Цены в купюрах: ' + r.counted + ' из ' + r.tasks;
+    var stat = r.fakes ? 'Фейков раскрыто: ' + r.caught + ' из ' + r.fakes : 'Правда подтверждена: ' + r.confirmed + ' из ' + r.truths;
     doShare('Детектор фейков «Прикинь!» в СберKids: ' + (r.fakes ? 'раскрыто ' + r.caught + ' из ' + r.fakes + ' фейков, ' : '') +
       r.score + ' из ' + r.max + ' очков — «' + r.title.name + '» ' + r.grid + (share ? '\n' + share : ''), {
       kicker: 'Детектор фейков', big: String(r.score), small: ' / ' + r.max, title: r.title.name, sub: stat,
@@ -705,7 +720,52 @@
     rec.innerHTML = ic('trophy') + 'Рекорд сессии: ' + S.record;
     App.capy.wear($('capy-start'), capyAcc());
     show('scr-start');
+    fitStart();
   }
+
+  // ---------- Стартовый экран на любой высоте ----------
+  // Капи с репликой занимают ровно то место, что осталось между шапкой и кнопками:
+  // не помещаются друг под другом — встают в ряд, совсем тесно — Капи без реплики.
+  // Так ничего не наезжает на баннер события и кнопки ни на одном телефоне.
+  function fitStart() {
+    var scr = $('scr-start');
+    if (scr.hidden) return;
+    var hero = scr.querySelector('.start-hero'), capy = $('capy-start'), bub = $('hero-bubble');
+    var cs = getComputedStyle(hero), pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+    // меряем по раскладке, а не по экрану: анимации появления не сбивают расчёт
+    function fits(withBubble) {
+      var cw = capy.offsetWidth, r = cw * 0.66;   // лаймовый круг больше самой Капи
+      var cx = capy.offsetLeft + cw / 2, cy = capy.offsetTop + capy.offsetHeight * 0.52;
+      var x0 = cx - r, y0 = cy - r, x1 = cx + r, y1 = cy + r;
+      if (withBubble) {
+        x0 = Math.min(x0, bub.offsetLeft); y0 = Math.min(y0, bub.offsetTop);
+        x1 = Math.max(x1, bub.offsetLeft + bub.offsetWidth); y1 = Math.max(y1, bub.offsetTop + bub.offsetHeight);
+      }
+      // по краям — отступ блока: Капи и реплика не прилипают к баннеру и кнопкам
+      return x0 >= -1 && y0 >= pt - 1 && x1 <= hero.clientWidth + 1 && y1 <= hero.clientHeight - pb + 1;
+    }
+    function tryMode(mode, from, to) {
+      scr.setAttribute('data-hero', mode);
+      var withBubble = mode === 'col' || mode === 'row';
+      for (var s = from; s >= to; s -= 6) {
+        hero.style.setProperty('--capy', s + 'px');
+        if (withBubble && s === from) roomForLines(bub);
+        if (fits(withBubble)) return true;
+      }
+      return false;
+    }
+    var big = Math.round(Math.min(150, hero.clientWidth * 0.38));
+    if (!(tryMode('col', big, 104) || tryMode('row', 120, 72) || tryMode('solo', 120, 56))) scr.setAttribute('data-hero', 'off');
+  }
+  // Реплики Капи разной длины: высоту берём под самую длинную — тап по Капи не двигает экран
+  function roomForLines(bub) {
+    var cur = bub.textContent, h = 0;
+    bub.style.minHeight = '';
+    LINES.forEach(function (t) { bub.textContent = t; h = Math.max(h, bub.offsetHeight); });
+    bub.textContent = cur;
+    bub.style.minHeight = h + 'px';
+  }
+  window.addEventListener('resize', fitStart);
 
   Array.prototype.forEach.call(document.querySelectorAll('[data-mode]'), function (b) {
     b.addEventListener('click', function () { startSolo(b.getAttribute('data-mode')); });
@@ -759,13 +819,11 @@
     $('load-error').hidden = true;
     App.content.load().then(function (c) {
       S.content = c;
-      var a = c.pools.animals.length >= 4, k = c.pools.countries.length >= 4, mo = (c.tasks || []).length >= 3;
-      document.querySelector('[data-mode="animals"]').disabled = !a;
-      document.querySelector('[data-mode="countries"]').disabled = !k;
-      document.querySelector('[data-mode="money"]').disabled = !mo;
-      document.querySelector('[data-mode="chaos"]').disabled = !(a || k || mo);
-      $('btn-duel').disabled = !(a || k || mo);
-      $('load-error').hidden = a || k || mo;
+      var can = App.content.playable(c), any = can.animals || can.countries || can.prices;
+      App.content.KINDS.forEach(function (k) { document.querySelector('[data-mode="' + k + '"]').disabled = !can[k]; });
+      document.querySelector('[data-mode="chaos"]').disabled = !any;
+      $('btn-duel').disabled = !any;
+      $('load-error').hidden = any;
       applyLook(c);
       var note = c.draft ? 'Черновик менеджера: игра с правками, которые ещё не опубликованы' : '';
       var spec = checkSpec();
@@ -773,7 +831,7 @@
         var first = App.content.pick(c, spec);
         if (first) {
           startSolo(first.kind, first);
-          note = 'Проверка из редактора: в первом раунде — ' + (first.claim.task ? first.ref.name : first.target.name + ' и ' + first.ref.name);
+          note = 'Проверка из редактора: в первом раунде — ' + first.target.name + ' и ' + first.ref.name;
         } else {
           note = 'Этого нет в игре: объект убран, не загрузился или запись с ошибкой — посмотрите в редакторе';
         }
@@ -782,11 +840,10 @@
     });
   }
 
-  // Ссылка из редактора контента: ?claim=c3, ?task=p2 или ?try=okapi — этот раунд будет первым
+  // Ссылка из редактора контента: ?claim=c3 или ?try=okapi — этот раунд будет первым
   function checkSpec() {
     var q = location.search, m;
     if ((m = /[?&]claim=(c\d+)/.exec(q))) return { claim: m[1] };
-    if ((m = /[?&]task=(p\d+)/.exec(q))) return { task: m[1] };
     if ((m = /[?&]try=([\w-]+)/.exec(q))) return { item: m[1] };
     return null;
   }
@@ -802,16 +859,16 @@
   // Всё, что меняется из game.json без релиза: цвета, тексты, режимы, событие по датам
   function applyLook(c) {
     var cfg = c.cfg, ev = c.event;
-    var theme = { animals: cfg.theme.animals, countries: cfg.theme.countries, money: cfg.theme.money };
+    var theme = { animals: cfg.theme.animals, countries: cfg.theme.countries, prices: cfg.theme.prices };
     if (ev && ev.theme) {
-      ['animals', 'countries', 'money'].forEach(function (k) {
+      App.content.KINDS.forEach(function (k) {
         if (/^#[0-9a-f]{3,8}$/i.test(ev.theme[k] || '')) theme[k] = ev.theme[k];
       });
     }
-    // цвет темы — пастельный фон доски для зверей, стран и денег
+    // цвет темы — пастельный фон доски для зверей, стран и цен
     document.documentElement.style.setProperty('--board-a', theme.animals);
     document.documentElement.style.setProperty('--board-c', theme.countries);
-    document.documentElement.style.setProperty('--board-m', theme.money);
+    document.documentElement.style.setProperty('--board-p', theme.prices);
     $('tagline').innerHTML = App.content.rich(cfg.texts.tagline);
     if (cfg.texts.capy.length) {
       LINES = cfg.texts.capy;
@@ -826,13 +883,12 @@
     }
     var m = cfg.modes;
     document.querySelector('[data-mode="chaos"]').hidden = !m.chaos;
-    document.querySelector('[data-mode="animals"]').hidden = !m.animals;
-    document.querySelector('[data-mode="countries"]').hidden = !m.countries;
-    document.querySelector('[data-mode="money"]').hidden = !m.money;
-    document.querySelector('.modes').hidden = !(m.animals || m.countries || m.money);
+    App.content.KINDS.forEach(function (k) { document.querySelector('[data-mode="' + k + '"]').hidden = !m[k]; });
+    document.querySelector('.modes').hidden = !(m.animals || m.countries || m.prices);
     $('btn-duel').hidden = !m.duel;
     $('btn-to-duel').hidden = !m.duel;
     App.capy.wear($('capy-start'), capyAcc());
+    fitStart();
   }
   $('btn-reload').addEventListener('click', loadContent);
 
@@ -845,6 +901,9 @@
     verdict.className = 'verdict';
     $('board').appendChild(verdict);
     syncSound();
+    fitStart();
+    // свои шрифты чуть меняют высоту текста — после загрузки раскладываем старт заново
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(fitStart);
     loadContent();
   }
   init();

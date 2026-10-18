@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 215">
-<defs><mask id="m"><rect x="20" y="0" width="300" height="200" rx="10" fill="#fff"/>
-<rect x="34" y="14" width="272" height="172" rx="4" fill="#000"/>
-<path d="M0 200 H340 L330 215 H10 Z" fill="#fff"/>
-<rect x="140" y="203" width="60" height="5" rx="2.5" fill="#000"/>
-</mask></defs>
-<rect width="340" height="215" fill="#000" mask="url(#m)"/>
-</svg>

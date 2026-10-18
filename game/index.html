@@ -30,8 +30,8 @@
     <symbol id="i-paw" viewBox="0 0 24 24"><path d="M12 12.5c-3 0-5 2.7-5 4.7 0 1.4 1.1 2.1 2.4 2.1 1 0 1.6-.5 2.6-.5s1.6.5 2.6.5c1.3 0 2.4-.7 2.4-2.1 0-2-2-4.7-5-4.7z"/><circle cx="5.8" cy="10.2" r="1.7"/><circle cx="9.5" cy="6" r="1.8"/><circle cx="14.5" cy="6" r="1.8"/><circle cx="18.2" cy="10.2" r="1.7"/></symbol>
     <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.3 2.3 3.4 5 3.4 8s-1.1 5.7-3.4 8c-2.3-2.3-3.4-5-3.4-8s1.1-5.7 3.4-8z"/></symbol>
     <symbol id="i-map" viewBox="0 0 24 24"><path d="M3.5 6.5l5.5-2 6 2 5.5-2v13l-5.5 2-6-2-5.5 2z"/><path d="M9 4.5v13M15 6.5v13"/></symbol>
-    <symbol id="i-cash" viewBox="0 0 24 24"><rect x="3" y="6.5" width="18" height="11" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6.5 9.5h.01M17.5 14.5h.01"/></symbol>
-    <symbol id="i-coin" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/></symbol>
+    <symbol id="i-piggy" viewBox="0 0 24 24"><ellipse cx="11.5" cy="12.5" rx="7.5" ry="5.5"/><path d="M19 10.8h1.2a1 1 0 0 1 1 1v1.4a1 1 0 0 1-1 1H19M13.6 7.3l2.4-2.6.6 3.3M8 17.3v2.4M15 17.3v2.4M9.6 9.6h3.4M4 12c-1 0-1.6-.6-1.6-1.4"/><circle cx="16" cy="11.2" r=".3"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3.5 12.4V4.8c0-.7.6-1.3 1.3-1.3h7.6l8.3 8.3c.5.5.5 1.3 0 1.8l-7.3 7.3c-.5.5-1.3.5-1.8 0z"/><circle cx="8.3" cy="8.3" r="1.6"/></symbol>
     <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
     <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5.5 13.5H12L11 21l7.5-10.5H12z"/></symbol>
     <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8.5 20h7M10 17h4"/></symbol>
@@ -85,7 +85,7 @@
       <div class="modes">
         <button class="tile" data-mode="animals" disabled><span class="chip-ic"><svg class="ic"><use href="#i-paw"/></svg></span><span>Звери<small>Вирусные фото</small></span></button>
         <button class="tile" data-mode="countries" disabled><span class="chip-ic"><svg class="ic"><use href="#i-globe"/></svg></span><span>Карты<small>Обман карты</small></span></button>
-        <button class="tile" data-mode="money" disabled><span class="chip-ic"><svg class="ic"><use href="#i-cash"/></svg></span><span>Деньги<small>Цена в купюрах</small></span></button>
+        <button class="tile" data-mode="prices" disabled><span class="chip-ic"><svg class="ic"><use href="#i-piggy"/></svg></span><span>Цены<small>В мороженках</small></span></button>
       </div>
       <button class="btn" id="btn-duel" disabled><svg class="ic"><use href="#i-duel"/></svg>Дуэль на одном телефоне</button>
       <div class="start-foot">
@@ -143,7 +143,7 @@
           <p id="res-fact"></p>
         </div>
         <div class="res-box res-tip" id="res-tip-box">
-          <div class="box-head"><svg class="ic"><use href="#i-bulb"/></svg><b>Факт</b></div>
+          <div class="box-head"><span class="box-ic" id="tip-ic"></span><b id="tip-title">Факт</b></div>
           <p id="res-tip"></p>
         </div>
         <button class="btn btn-primary btn-big" id="btn-next"><span>Дальше</span><svg class="ic"><use href="#i-arrow"/></svg></button>
