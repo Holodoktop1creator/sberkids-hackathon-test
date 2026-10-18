@@ -81,8 +81,8 @@
       <button data-tab="claims" class="on">🕵️ Заявления</button>
       <button data-tab="animals">🐾 Звери</button>
       <button data-tab="countries">🗺️ Страны</button>
-      <button data-tab="money">💰 Деньги</button>
-      <button data-tab="prices">💰 Цены в купюрах</button>
+      <button data-tab="prices">💰 Деньги: цены в купюрах</button>
+      <button data-tab="money">🛍️ Деньги: вещи</button>
       <button data-tab="texts">✍️ Тексты и события</button>
       <button data-tab="new">➕ Новая картинка</button>
     </div>
@@ -94,7 +94,7 @@
     <p class="muted">Перетащите PNG или SVG с прозрачным фоном. Игра сама обрежет поля, посчитает пропорции и перекрасит силуэт. Заполните поля и нажмите «Добавить в игру» — объект появится в своей вкладке и в черновике игры.</p>
     <div class="drop" id="drop">📂 Перетащите файл сюда или нажмите, чтобы выбрать<input type="file" id="file" accept="image/png,image/svg+xml,image/webp" hidden></div>
     <div class="form">
-      <label>Тема <select id="f-kind"><option value="animals">Зверь</option><option value="countries">Страна</option><option value="money">Деньги</option></select></label>
+      <label>Тема <select id="f-kind"><option value="animals">Зверь</option><option value="countries">Страна</option><option value="money">Вещь для режима «Деньги»</option></select></label>
       <label>id (латиницей) <input id="f-id" placeholder="okapi"></label>
       <label>Название <input id="f-name" placeholder="Окапи"></label>
       <label id="l-size">Размер, м <input id="f-size" type="number" step="any" value="2"></label>
@@ -120,7 +120,7 @@
   var U = App.util;
   var BASE = '../game/content/';
   var KEY = App.content.DRAFT_KEY;
-  var CATS = { animals: 'Звери', countries: 'Страны', money: 'Деньги' };
+  var CATS = { animals: 'Звери', countries: 'Страны', money: 'Вещи' };
   var DIMS = { long: 'в длину', tail: 'в длину с хвостом', tall: 'в высоту', diam: 'в диаметре' };
   var ORIG = null, D = null, BASEDATA = { animals: [], countries: [] }, C = null;
   var tab = 'claims', dropped = null;
@@ -206,13 +206,13 @@
   // ---------- сводка ----------
   function renderSummary() {
     var cfg = C.cfg, ev = C.event;
-    var all = C.claims.animals.concat(C.claims.countries, C.claims.money);
+    var all = C.claims.animals.concat(C.claims.countries);
     var truths = all.filter(function (c) { return c.isTrue; }).length;
     $('summary').innerHTML = (C.errors.length
       ? '<ul class="errors">' + C.errors.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'
       : '<p class="ok">✅ Ошибок нет — всё загрузится в игре</p>') +
       '<div class="facts"><span>🐾 Зверей: <b>' + C.pools.animals.length + '</b></span><span>🌍 Стран: <b>' + C.pools.countries.length + '</b></span>' +
-      '<span>💰 Денег: <b>' + C.pools.money.length + '</b></span><span>🕵️ Заявлений: <b>' + all.length + '</b> (правды ' + truths + ')</span>' +
+      '<span>🛍️ Вещей: <b>' + C.pools.money.length + '</b></span><span>🕵️ Заявлений: <b>' + all.length + '</b> (правды ' + truths + ')</span>' +
       '<span>💰 Цен в купюрах: <b>' + (C.tasks || []).length + '</b></span>' +
       '<span>Раундов: <b>' + cfg.rounds + '</b></span></div>' +
       '<p>' + (ev ? 'Событие на эту дату: <span class="event-badge">' + esc(ev.title) + '</span> ' + esc(ev.text || '') : '<span class="muted">На эту дату событий нет.</span>') + '</p>';
@@ -230,12 +230,13 @@
 
   // Заявления
   function claimOf(i) {
-    var all = C.claims.animals.concat(C.claims.countries, C.claims.money);
+    var all = C.claims.animals.concat(C.claims.countries);
     for (var k = 0; k < all.length; k++) if (all[k].uid === 'c' + i) return all[k];
     return null;
   }
   function options(selected) {
-    return Object.keys(CATS).map(function (cat) {
+    // заявления «фейк или правда» — только про зверей и карты; деньги — задачи «цена в купюрах»
+    return ['animals', 'countries'].map(function (cat) {
       return '<optgroup label="' + CATS[cat] + '">' + C.pools[cat].map(function (it) {
         return '<option value="' + esc(it.id) + '"' + (it.id === selected ? ' selected' : '') + '>' + esc(it.name) + '</option>';
       }).join('') + '</optgroup>';
@@ -268,7 +269,7 @@
   function renderPrices() {
     var PAY = App.content.PAY;
     var html = '<div class="toolbar"><button class="btn go" data-act="padd">➕ Новая задача</button>' +
-      '<span class="muted">Вещь из вкладки «Деньги», цена в рублях и чем платим. Игра посчитает, сколько купюр или монет нужно, и построит стопку. Текст задания можно не писать — он соберётся сам.</span></div><div class="grid">';
+      '<span class="muted">Режим «💰 Деньги» целиком состоит из этих задач. Вещь из вкладки «Деньги: вещи», цена в рублях и чем платим. Первая задача в списке — первый раунд режима. Игра посчитает, сколько купюр или монет нужно, и построит стопку. Текст задания можно не писать — он соберётся сам.</span></div><div class="grid">';
     html += D.claims.prices.map(function (p, i) {
       var t = null;
       (C.tasks || []).forEach(function (x) { if (x.uid === 'p' + i) t = x; });

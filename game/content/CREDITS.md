@@ -47,3 +47,5 @@
 - Стегозавр (*Stegosaurus stenops*) — PhyloPic `429d71d8-2940-449b-838b-a5b7f1733eba`, CC0, файл `img/stegosaurus.svg`
 - Брахиозавр (*Brachiosaurus altithorax*) — PhyloPic `2431b273-7b21-482e-b971-70377686335d`, CC0, файл `img/brachiosaurus.svg`
 - Шерстистый мамонт (*Mammuthus primigenius*) — PhyloPic `e9ea8595-730d-47cc-b0d0-78d186d91bcd`, CC0, файл `img/mammoth.svg`
+
+Вещи для режима «Деньги» (`img/phone.svg`, `laptop.svg`, `hph.svg`, `ice.svg`, `shoe.svg`, `ball.svg`, `bag.svg`, `scoot.svg`) нарисованы для игры простыми фигурами, без брендов и логотипов. Стопки купюр и монет игра строит сама по толщине одной купюры (около 0,1 мм) и монеты (1 ₽ — 1,5 мм, 10 ₽ — 2,2 мм).

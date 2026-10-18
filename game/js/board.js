@@ -122,7 +122,8 @@
   }
 
   function box(item, pos, f, s) {
-    var w = item.w * (item.stretch ? 1 : f) * s, h = item.h * f * s;
+    // стопка монет очень узкая — рисуем её не тоньше пальца, важна только высота
+    var w = item.stretch ? Math.max(item.w * s, 14) : item.w * f * s, h = item.h * f * s;
     var x = pos.left !== undefined ? pos.left : pos.cx - w / 2;
     var y = pos.bottom !== undefined ? pos.bottom - h : pos.cy - h / 2;
     return { x: x, y: y, w: w, h: h };

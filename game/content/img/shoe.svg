@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 110">
+<defs><mask id="m"><path d="M10 82 Q12 42 60 36 L118 20 Q150 14 170 40 Q200 60 250 62 Q276 66 276 86 L276 98 Q276 108 266 108 L18 108 Q8 108 8 98 Z" fill="#fff"/>
+<rect x="8" y="92" width="268" height="4" fill="#000"/>
+<circle cx="132" cy="38" r="3.5" fill="#000"/><circle cx="148" cy="46" r="3.5" fill="#000"/><circle cx="164" cy="54" r="3.5" fill="#000"/></mask></defs>
+<rect width="280" height="110" fill="#000" mask="url(#m)"/>
+</svg>

@@ -111,7 +111,7 @@
     // громкое заявление, которое надо проверить
     $('claim').textContent = r.claim.task ? r.claim.text : '«' + r.claim.text.replace(/\.$/, '') + '»';
     restart($('claim'), 'in');
-    $('ask').innerHTML = r.claim.task ? '🔎 Растяни <b>' + esc(r.target.name.toLowerCase()) + '</b> до нужной высоты'
+    $('ask').innerHTML = r.claim.task ? '🔎 Растяни <b>' + esc(r.target.acc || r.target.name.toLowerCase()) + '</b> до нужной высоты'
       : '🔎 Проверь: <b>' + esc(r.target.name) + '</b> — ' + esc(askText(r));
     $('board').classList.toggle('boss', !!r.boss);
     $('turn').hidden = true;
@@ -128,7 +128,7 @@
 
   function showIntro(r) {
     var tag = $('intro-tag');
-    tag.textContent = r.boss ? '⚡ БОСС ×2 · фейк или правда? ⚡' : r.rematch ? '🔁 РЕВАНШ' : r.claim.task ? '💰 Сколько это в деньгах?' : '🕵️ Фейк или правда?';
+    tag.textContent = r.boss ? (r.claim.task ? '⚡ БОСС ×2 · сколько это в деньгах? ⚡' : '⚡ БОСС ×2 · фейк или правда? ⚡') : r.rematch ? '🔁 РЕВАНШ' : r.claim.task ? '💰 Сколько это в деньгах?' : '🕵️ Фейк или правда?';
     tag.className = 'intro-tag' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
     $('intro-a').textContent = r.target.name;
     $('intro-b').innerHTML = '';
@@ -261,6 +261,10 @@
 
   function ratioLines(r, g) {
     var t = r.target, ref = r.ref;
+    if (r.claim.task) {
+      // в задаче про деньги считаем в сантиметрах, а не «во сколько раз»
+      return { truth: t.name + ' — ' + U.fmtLen(t.value), guess: U.fmtLen(B.value(t, g)), said: '', miss: '' };
+    }
     var k = t.value / ref.value;
     var gv = B.value(t, g) / ref.value;
     var flip = k < 1;
@@ -297,7 +301,7 @@
     if (pts < 40 && !r.rematch && rematches < 2) {
       for (var j = S.idx + 2; j < S.rounds.length; j++) {
         if (!S.rounds[j].boss && !S.rounds[j].rematch) {
-          var rm = App.content.rematch(S.content, r);
+          var rm = App.content.rematch(S.content, r, S.rounds);
           if (rm) S.rounds[j] = rm;
           break;
         }
@@ -427,12 +431,12 @@
     function avg(list) { return list.length ? Math.round(list.reduce(function (a, b) { return a + b.pts; }, 0) / list.length) : 0; }
     var early = avg(S.results.slice(0, 3)), late = avg(S.results.slice(-3));
     $('end-kicker').textContent = isRecord ? '🔥 Новый рекорд сессии!' : 'Итог проверки';
-    $('end-best').innerHTML = '<h3>Детектор</h3><ul>' +
-      '<li>🕵️ Раскрыто фейков: <b>' + caught + ' из ' + fakes.length + '</b></li>' +
+    $('end-best').innerHTML = '<h3>' + (fakes.length || truths.length ? 'Детектор' : 'Финансы') + '</h3><ul>' +
+      (fakes.length ? '<li>🕵️ Раскрыто фейков: <b>' + caught + ' из ' + fakes.length + '</b></li>' : '') +
       (truths.length ? '<li>✅ Правда подтверждена: <b>' + confirmed + ' из ' + truths.length + '</b></li>' : '') +
       (tasks.length ? '<li>💰 Цен в купюрах прикинуто: <b>' + tasks.filter(function (x) { return x.caught; }).length + ' из ' + tasks.length + '</b></li>' : '') +
       (S.results.length >= 6 ? '<li>📈 Точность прикидки: в начале ' + early + '%, в конце ' + late + '%' + (late >= early + 10 ? ' — прогресс! 🚀' : '') + '</li>' : '') +
-      (best ? '<li>🎯 ' + esc(best.round.target.name) + ' vs ' + esc(best.round.ref.name) + ' — ' + best.pts + ' ' + U.plural(best.pts, ['очко', 'очка', 'очков']) + '</li>' : '') +
+      (best ? '<li>🎯 ' + esc(best.task ? best.round.ref.name + ' → ' + best.round.target.name.toLowerCase() : best.round.target.name + ' vs ' + best.round.ref.name) + ' — ' + best.pts + ' ' + U.plural(best.pts, ['очко', 'очка', 'очков']) + '</li>' : '') +
       (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') +
       '</ul>';
 
@@ -447,7 +451,7 @@
     S.rounds.forEach(function (r) { kinds[r.kind] = true; });
     var L = S.content.cfg.lessons;
     var lessons = [];
-    if (L.detector) lessons.push('🕵️ ' + L.detector);
+    if (L.detector && (kinds.animals || kinds.countries)) lessons.push('🕵️ ' + L.detector);
     if (kinds.animals && L.animals) lessons.push('🐾 ' + L.animals);
     if (kinds.countries && L.countries) lessons.push('🗺️ ' + L.countries);
     if (kinds.countries && L.area) lessons.push('📐 ' + L.area);
@@ -622,7 +626,7 @@
     $('load-error').hidden = true;
     App.content.load().then(function (c) {
       S.content = c;
-      var a = c.pools.animals.length >= 4, k = c.pools.countries.length >= 4, mo = c.pools.money.length >= 4;
+      var a = c.pools.animals.length >= 4, k = c.pools.countries.length >= 4, mo = (c.tasks || []).length >= 3;
       document.querySelector('[data-mode="animals"]').disabled = !a;
       document.querySelector('[data-mode="countries"]').disabled = !k;
       document.querySelector('[data-mode="money"]').disabled = !mo;
