@@ -8,7 +8,7 @@
   // Камера сама подстраивает зум, чтобы всё помещалось на вертикальном экране.
   var PAD = 14, TOP = 46, BOTTOM = 40, LABEL = 36, GAP = 22;
   var K = Math.LN2 / 170;          // 170 px свайпа = размер ×2
-  var G_MIN = 0.12, G_MAX = 8;
+  var G_MIN = 1 / 40, G_MAX = 40;   // фейк может преувеличивать в десятки раз
 
   var el, svg, L = {}, chips = {}, ruler, rulerTxt;
   var W = 0, H = 0;
@@ -264,9 +264,10 @@
     L.truth.shape.innerHTML = shapeOf(R.target, 'truth');
     L.truth.wrap.classList.remove('slam');
     el.classList.toggle('is-country', R.kind === 'countries');
+    el.classList.toggle('is-money', R.kind === 'money');
     var rowFit = geom('row', 1.3).fit, colFit = geom('col', 1.3).fit;
     // рост сравнивают на общей земле, длину — друг под другом от одного края
-    var tall = R.kind === 'animals' && R.target.dim === 'tall';
+    var tall = R.kind !== 'countries' && R.target.dim === 'tall';
     mode = rowFit >= colFit * (tall ? 0.5 : 1) ? 'row' : 'col';
     chips.ref.textContent = '⬛ ' + R.ref.name + ' · ' + fmtVal(R.ref, R.ref.value) + (R.kind === 'countries' ? '' : ' ' + R.ref.dimText);
     cam.s = goal();

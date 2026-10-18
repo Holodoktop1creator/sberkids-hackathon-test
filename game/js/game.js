@@ -85,7 +85,7 @@
   }
 
   // ---------- Раунд ----------
-  var ASK = { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', area: 'какая площадь?' };
+  var ASK = { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', diam: 'какой диаметр?', area: 'какая площадь?' };
   function askText(r) {
     var ask = S.content.cfg.texts.ask || {};
     var key = r.kind === 'countries' ? 'area' : r.target.dim;
@@ -446,6 +446,7 @@
     if (kinds.animals && L.animals) lessons.push('🐾 ' + L.animals);
     if (kinds.countries && L.countries) lessons.push('🗺️ ' + L.countries);
     if (kinds.countries && L.area) lessons.push('📐 ' + L.area);
+    if (kinds.money && L.money) lessons.push('💰 ' + L.money);
     $('end-lessons').innerHTML = '<h3>Что теперь знаешь</h3><ul>' + lessons.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
 
     show('scr-end');
@@ -616,12 +617,13 @@
     $('load-error').hidden = true;
     App.content.load().then(function (c) {
       S.content = c;
-      var a = c.pools.animals.length >= 4, k = c.pools.countries.length >= 4;
+      var a = c.pools.animals.length >= 4, k = c.pools.countries.length >= 4, mo = c.pools.money.length >= 4;
       document.querySelector('[data-mode="animals"]').disabled = !a;
       document.querySelector('[data-mode="countries"]').disabled = !k;
-      document.querySelector('[data-mode="chaos"]').disabled = !(a || k);
-      $('btn-duel').disabled = !(a || k);
-      $('load-error').hidden = a || k;
+      document.querySelector('[data-mode="money"]').disabled = !mo;
+      document.querySelector('[data-mode="chaos"]').disabled = !(a || k || mo);
+      $('btn-duel').disabled = !(a || k || mo);
+      $('load-error').hidden = a || k || mo;
       applyLook(c);
     });
   }
@@ -637,14 +639,15 @@
   // Всё, что меняется из game.json без релиза: цвета, тексты, режимы, событие по датам
   function applyLook(c) {
     var cfg = c.cfg, ev = c.event;
-    var theme = { animals: cfg.theme.animals, countries: cfg.theme.countries };
+    var theme = { animals: cfg.theme.animals, countries: cfg.theme.countries, money: cfg.theme.money };
     if (ev && ev.theme) {
-      ['animals', 'countries'].forEach(function (k) {
+      ['animals', 'countries', 'money'].forEach(function (k) {
         if (/^#[0-9a-f]{3,8}$/i.test(ev.theme[k] || '')) theme[k] = ev.theme[k];
       });
     }
     document.documentElement.style.setProperty('--board-a', theme.animals);
     document.documentElement.style.setProperty('--board-c', theme.countries);
+    document.documentElement.style.setProperty('--board-m', theme.money);
     $('tagline').innerHTML = App.content.rich(cfg.texts.tagline);
     var lines = Array.isArray(cfg.texts.capy) ? cfg.texts.capy.filter(function (x) { return typeof x === 'string' && x; }) : [];
     if (lines.length) {
@@ -662,6 +665,7 @@
     document.querySelector('[data-mode="chaos"]').hidden = !m.chaos;
     document.querySelector('[data-mode="animals"]').hidden = !m.animals;
     document.querySelector('[data-mode="countries"]').hidden = !m.countries;
+    document.querySelector('[data-mode="money"]').hidden = !m.money;
     $('btn-duel').hidden = !m.duel;
     $('btn-to-duel').hidden = !m.duel;
     App.capy.wear($('capy-start'), capyAcc());

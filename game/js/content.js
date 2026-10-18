@@ -14,8 +14,8 @@
     rounds: 8,
     boss: [4, 8],
     duelRounds: 5,
-    ratio: { animals: [1.2, 15], countries: [1.3, 40] },
-    traps: { animals: [], countries: [] },
+    ratio: { animals: [1.2, 15], countries: [1.3, 40], money: [1.05, 20] },
+    traps: { animals: [], countries: [], money: [] },
     ranks: [
       { min: 100, text: 'ИДЕАЛЬНО! 🎯' }, { min: 85, text: 'ИМБА! 🔥' }, { min: 65, text: 'ХОРОШ! 😎' },
       { min: 40, text: 'ТЕПЛО 🙂' }, { min: 15, text: 'ХОЛОДНО 🥶' }, { min: 0, text: 'МИМО 😵‍💫' }
@@ -23,8 +23,8 @@
     titles: [{ min: 0, name: 'Прикидчик', emoji: '🧮' }],
     unlocks: [],
     lessons: {},
-    modes: { chaos: true, animals: true, countries: true, duel: true },
-    theme: { animals: '#ffcf3d', countries: '#63e6ff' },
+    modes: { chaos: true, animals: true, countries: true, money: true, duel: true },
+    theme: { animals: '#ffcf3d', countries: '#63e6ff', money: '#8ee28a' },
     texts: {
       tagline: 'Фейк или правда? Растяни силуэт\nдо **настоящего** размера!',
       capy: ['Йо! Я Капи — детектор фейков 🕵️'],
@@ -33,7 +33,7 @@
     },
     events: []
   };
-  var DIM = { long: 'в длину', tail: 'в длину с хвостом', tall: 'в высоту' };
+  var DIM = { long: 'в длину', tail: 'в длину с хвостом', tall: 'в высоту', diam: 'в диаметре' };
 
   function isNum(v) { return typeof v === 'number' && isFinite(v) && v > 0; }
   function isStr(v) { return typeof v === 'string' && v.length > 0; }
@@ -154,7 +154,9 @@
       }
       var animals = build((res[1] && res[1].animals || []).concat(extra.animals || []), animal, 'Звери');
       var countries = build((res[2] && res[2].countries || []).concat(extra.countries || []), country, 'Страны');
-      var all = animals.concat(countries);
+      // деньги: купюры, монеты, карта, стопки — размеры по стандартам, меряются как длина
+      var money = build(extra.money || [], animal, 'Деньги');
+      var all = animals.concat(countries, money);
       return Promise.all(all.map(function (it) {
         if (it.ready) return null;
         return App.assets.prepare(it).catch(function (e) { errors.push(it.name + ': ' + e.message); });
@@ -162,7 +164,7 @@
         var ok = function (it) { return it.ready; };
         var content = {
           cfg: cfg,
-          pools: { animals: animals.filter(ok), countries: countries.filter(ok) },
+          pools: { animals: animals.filter(ok), countries: countries.filter(ok), money: money.filter(ok) },
           event: activeEvent(cfg, date),
           errors: errors
         };
@@ -182,7 +184,7 @@
     var lists = [['пары-ловушки', content.cfg.traps]];
     if (content.event && content.event.traps) lists.push(['события «' + content.event.title + '»', content.event.traps]);
     lists.forEach(function (l) {
-      ['animals', 'countries'].forEach(function (kind) {
+      ['animals', 'countries', 'money'].forEach(function (kind) {
         (l[1][kind] || []).forEach(function (p) {
           if (!byId(content.pools[kind], p[0]) || !byId(content.pools[kind], p[1])) {
             content.errors.push('В списке ' + l[0] + ' нет объекта: ' + p.join(' / '));
@@ -195,7 +197,7 @@
   // ---------- Заявления «Детектора фейков» ----------
   var SOURCES = {
     social: '📱 В соцсетях пишут', movie: '🎬 В кино показывают', photo: '📸 Вирусное фото',
-    map: '🗺️ На обычной карте', rumor: '🗣️ Говорят', cartoon: '📺 В мультиках'
+    map: '🗺️ На обычной карте', rumor: '🗣️ Говорят', cartoon: '📺 В мультиках', think: '🤔 Многие думают'
   };
   var TRUE_RANGE = Math.log(1.06);
 
@@ -207,17 +209,17 @@
     return {
       target: t, ref: r, says: says, text: text, why: why || '',
       source: (sources && isStr(sources[source]) && sources[source]) || SOURCES[source] || SOURCES.rumor,
-      g0: U.clamp(g0, 0.12, 8), isTrue: Math.abs(Math.log(g0)) <= TRUE_RANGE
+      g0: U.clamp(g0, 1 / 40, 40), isTrue: Math.abs(Math.log(g0)) <= TRUE_RANGE
     };
   }
 
   function buildClaims(raw, content) {
-    var out = { animals: [], countries: [] };
+    var out = { animals: [], countries: [], money: [] };
     if (!raw || !Array.isArray(raw.claims)) return out;
     var sources = raw.sources && typeof raw.sources === 'object' ? raw.sources : {};
     raw.claims.forEach(function (c, i) {
       var kind = null, t = null, r = null;
-      ['animals', 'countries'].forEach(function (k) {
+      ['animals', 'countries', 'money'].forEach(function (k) {
         var a = byId(content.pools[k], c && c.target), b = byId(content.pools[k], c && c.ref);
         if (a && b && a !== b) { kind = k; t = a; r = b; }
       });
@@ -290,17 +292,19 @@
   // Во время события босс-раунды берутся из его пар.
   function makeRun(content, mode, n, boss) {
     var kinds = [];
-    var has = { animals: content.pools.animals.length >= 4, countries: content.pools.countries.length >= 4 };
-    if (mode === 'chaos' && has.animals && has.countries) {
-      for (var i = 0; i < n; i++) kinds.push(i % 2 ? 'countries' : 'animals');
+    var cats = ['animals', 'countries', 'money'].filter(function (k) { return content.pools[k] && content.pools[k].length >= 4; });
+    if (!cats.length) return [];
+    if (mode === 'chaos') {
+      // все темы вперемешку, поровну
+      for (var i = 0; i < n; i++) kinds.push(cats[i % cats.length]);
       kinds = U.shuffle(kinds);
     } else {
-      var only = mode === 'countries' && has.countries ? 'countries' : has.animals ? 'animals' : 'countries';
+      var only = cats.indexOf(mode) >= 0 ? mode : cats[0];
       for (var j = 0; j < n; j++) kinds.push(only);
     }
     var used = {}, usedClaims = {};
     var out = [];
-    var claims = content.claims || { animals: [], countries: [] };
+    var claims = content.claims || { animals: [], countries: [], money: [] };
     var eventBoss = !!(content.event && content.event.traps);
     kinds.forEach(function (kind, idx) {
       var isBoss = (boss || []).indexOf(idx + 1) >= 0;
@@ -309,7 +313,7 @@
       if (isBoss && eventBoss) p = trapPair(content, kind, used, true);
       // готовые заявления из claims.json; на босс-раунде — только фейки
       if (!p) {
-        var pool = claims[kind].filter(function (c) {
+        var pool = (claims[kind] || []).filter(function (c) {
           return !usedClaims[c.uid] && !used[c.target.id] && (!isBoss || !c.isTrue);
         });
         if (pool.length && (isBoss || Math.random() < 0.8)) {

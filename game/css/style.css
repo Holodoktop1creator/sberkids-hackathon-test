@@ -70,6 +70,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .btn-violet { background: var(--violet); color: #fff; }
 .btn-mode { flex: 1; background: var(--sky); }
 .btn-mode[data-mode="animals"] { background: var(--gold); }
+.btn-mode[data-mode="money"] { background: #8ee28a; }
+.start-btns .row .btn-mode { font-size: 16px; padding: 12px 6px; }
 .btn-chaos { background: linear-gradient(90deg, var(--lime), var(--sky), var(--pink), var(--lime)); background-size: 300% 100%; animation: rainbow 3s linear infinite; }
 @keyframes rainbow { to { background-position: 300% 0; } }
 .btn-ghost { background: rgba(255, 255, 255, .12); color: #fff; border-color: rgba(255, 255, 255, .25); box-shadow: 0 4px 0 rgba(0, 0, 0, .35); }
@@ -209,6 +211,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   touch-action: none;
 }
 .board.is-country { background: var(--board-c, var(--sky)); }
+.board.is-money { background: var(--board-m, #8ee28a); }
 .board.boss { box-shadow: 0 6px 0 var(--ink), 0 0 0 4px var(--gold), 0 0 30px rgba(255, 207, 61, .7); animation: bossGlow 1s ease-in-out infinite; }
 @keyframes bossGlow { 50% { box-shadow: 0 6px 0 var(--ink), 0 0 0 4px var(--pink), 0 0 40px rgba(255, 92, 168, .8); } }
 .bgrid {
