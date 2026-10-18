@@ -11,6 +11,7 @@
 <style>
   :root { --ink: #1b1340; --bg: #f4f2fb; --line: #ddd8f0; --ok: #1f9d55; --bad: #d6336c; --hot: #ff2d95; --lime: #c6ff3d; }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   header { position: sticky; top: 0; z-index: 5; background: var(--ink); color: #fff; padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
   header h1 { margin: 0; font-size: 18px; flex: 1; min-width: 200px; }
@@ -39,6 +40,8 @@
   .card.bad { border-color: var(--bad); background: #fff5f8; }
   /* силуэты на пастельной доске — как в игре */
   .card svg { display: block; width: 100%; height: 110px; background: #ffe9c4 repeating-linear-gradient(0deg, transparent 0 19px, rgba(255,255,255,.7) 19px 21px); border-radius: 8px; }
+  .card[data-cat="countries"] svg { background-color: #dcefff; }
+  .card[data-cat="prices"] svg, .preview.is-price svg { background-color: #ffe4f1; }
   .card label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: #6b6290; }
   .card input, .card select, .card textarea, .wide input, .wide textarea { font: inherit; color: var(--ink); padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; width: 100%; }
   .card textarea, .wide textarea { resize: vertical; min-height: 54px; }
@@ -103,8 +106,7 @@
       <button data-tab="claims" class="on">🕵️ Заявления</button>
       <button data-tab="animals">🐾 Звери</button>
       <button data-tab="countries">🗺️ Страны</button>
-      <button data-tab="prices">💰 Деньги: цены в купюрах</button>
-      <button data-tab="money">🛍️ Деньги: вещи</button>
+      <button data-tab="prices">🛒 Цены: вещи и единицы</button>
       <button data-tab="texts">✍️ Тексты и события</button>
       <button data-tab="new">➕ Новая картинка</button>
     </div>
@@ -117,20 +119,21 @@
     <p class="muted">Перетащите PNG или SVG с прозрачным фоном. Игра сама обрежет поля, посчитает пропорции и перекрасит силуэт. Заполните поля и нажмите «Добавить в игру» — объект появится в своей вкладке, в черновике игры и, после «Опубликовать», у детей.</p>
     <div class="drop" id="drop">📂 Перетащите файл сюда или нажмите, чтобы выбрать<input type="file" id="file" accept="image/png,image/svg+xml,image/webp" hidden></div>
     <div class="form">
-      <label>Тема <select id="f-kind"><option value="animals">Зверь</option><option value="countries">Страна</option><option value="money">Вещь для режима «Деньги»</option></select></label>
+      <label>Тема <select id="f-kind"><option value="animals">Зверь</option><option value="countries">Страна</option><option value="prices">Вещь с ценой (режим «Цены»)</option></select></label>
       <label>id (латиницей) <input id="f-id" placeholder="okapi"></label>
       <label>Название <input id="f-name" placeholder="Окапи"></label>
       <label id="l-size">Размер, м <input id="f-size" type="number" step="any" value="2"></label>
       <label id="l-dim">Измерение <select id="f-dim"><option value="long">в длину</option><option value="tail">в длину с хвостом</option><option value="tall">в высоту</option><option value="diam">в диаметре</option></select></label>
+      <label id="l-forms" hidden>Как считать: 1 · 2 · 5 <input id="f-forms" placeholder="самокат, самоката, самокатов"></label>
+      <label id="l-week" hidden>Покупают раз в неделю <input id="f-week" type="number" step="any" placeholder="пусто — это цель"></label>
+      <label id="l-without" hidden>Копить «без…» <input id="f-without" placeholder="без мороженого"></label>
       <label id="l-ref">Эталон рядом <select id="f-ref"></select></label>
-      <label id="l-price" hidden>Цена, ₽ <input id="f-price" type="number" step="any" value="1000"></label>
-      <label id="l-pay" hidden>Чем платим <select id="f-pay"></select></label>
       <label style="flex:1;min-width:220px">Факт <input id="f-fact" placeholder="Родственник жирафа, а похож на зебру"></label>
     </div>
-    <label class="check" id="l-claim"><input type="checkbox" id="f-claim" checked> Сразу добавить заявление-фейк с этим эталоном («в 2 раза больше правды») — так объект точно попадёт в игру. Текст можно поправить во вкладке «Заявления».</label>
-    <p class="muted" id="l-moneynote" hidden>Для вещи сразу создастся задача «цена в купюрах» с этой ценой: режим «Деньги» состоит из задач, и без задачи вещь в игре не появится.</p>
+    <label class="check" id="l-claim"><input type="checkbox" id="f-claim" checked> <span id="l-claim-text">Сразу добавить заявление-фейк с этим эталоном («в 2 раза больше правды») — так объект точно попадёт в игру. Текст можно поправить во вкладке «Заявления».</span></label>
+    <p class="muted" id="l-pricenote" hidden>Вещь с ценой — это цель (самокат, смартфон) или понятная единица (мороженое, пицца). У единицы заполните «Покупают раз в неделю» и «Копить без…»: из них игра считает «самокат = 40 мороженых = почти 2 месяца без мороженого». Как считать — три формы через запятую: для 1, для 2 и для 5 штук.</p>
     <div class="preview" id="preview" hidden>
-      <div><svg id="pv-styles"></svg><small class="muted">Стили: эталон · догадка · правильный ответ</small></div>
+      <div><svg id="pv-styles"></svg><small class="muted" id="pv-styles-note">Стили: эталон · догадка · правильный ответ</small></div>
       <div><svg id="pv-scale"></svg><small class="muted" id="pv-note"></small></div>
     </div>
     <p id="pv-error" class="errors" hidden></p>
@@ -168,7 +171,8 @@
   var BASE = '../game/content/';
   var KEY = App.content.DRAFT_KEY;
   var FILES = ['game', 'items', 'claims'];
-  var CATS = { animals: 'Звери', countries: 'Страны', money: 'Вещи' };
+  var CATS = { animals: 'Звери', countries: 'Страны', prices: 'Цены' };
+  var KINDS = App.content.KINDS, P = App.content.price;
   var DIMS = { long: 'в длину', tail: 'в длину с хвостом', tall: 'в высоту', diam: 'в диаметре' };
   var ORIG = null, D = null, BASEDATA = { animals: [], countries: [] }, C = null;
   var tab = 'claims', dropped = null;
@@ -179,20 +183,23 @@
   function getJSON(name) {
     return fetch(BASE + name, { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
   }
-  function val(it) { return it.kind === 'country' ? U.fmtArea(it.value) : U.fmtLen(it.value) + ' ' + it.dimText; }
+  function val(it) { return it.kind === 'price' ? U.fmt(it.value) + ' ₽' : it.kind === 'country' ? U.fmtArea(it.value) : U.fmtLen(it.value) + ' ' + it.dimText; }
   function num(v) { if (v === '' || v == null) return undefined; var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : v; }
   function count(n, forms) { return n + ' ' + U.plural(n, forms); }
-  var CLAIMS = ['заявление', 'заявления', 'заявлений'], TASKS = ['задача', 'задачи', 'задач'], TRAPS = ['пара-ловушка', 'пары-ловушки', 'пар-ловушек'];
+  var CLAIMS = ['заявление', 'заявления', 'заявлений'], TRAPS = ['пара-ловушка', 'пары-ловушки', 'пар-ловушек'];
 
   // ---------- черновик ----------
   function normalize(d) {
     d.items = d.items || {};
-    ['animals', 'countries', 'money', 'hidden'].forEach(function (k) { if (!Array.isArray(d.items[k])) d.items[k] = []; });
+    ['animals', 'countries', 'prices', 'hidden'].forEach(function (k) { if (!Array.isArray(d.items[k])) d.items[k] = []; });
     if (!d.items.edits || typeof d.items.edits !== 'object') d.items.edits = {};
+    // режим «Деньги» («цена в купюрах») убран — его записи из старых черновиков не нужны
+    delete d.items.money;
     d.claims = d.claims || {};
     if (!Array.isArray(d.claims.claims)) d.claims.claims = [];
-    if (!Array.isArray(d.claims.prices)) d.claims.prices = [];
+    delete d.claims.prices;
     if (!d.claims.sources) d.claims.sources = clone(App.content.SOURCES);
+    Object.keys(App.content.SOURCES).forEach(function (k) { if (!d.claims.sources[k]) d.claims.sources[k] = App.content.SOURCES[k]; });
     d.game = d.game || {};
     d.game.texts = d.game.texts || {};
     d.game.lessons = d.game.lessons || {};
@@ -203,7 +210,7 @@
   // Черновик в том виде, в каком он ляжет в игру: новые картинки — файлами img/… вместо data URL
   function pubJson() {
     var items = clone(D.items), images = [];
-    ['animals', 'countries', 'money'].forEach(function (cat) {
+    KINDS.forEach(function (cat) {
       items[cat].forEach(function (r) {
         if (/^data:/.test(r.image || '')) {
           var f = r._file || ('img/' + r.id + '.png');
@@ -245,13 +252,13 @@
 
   function findItem(id) {
     if (!C) return null;
-    var all = C.pools.animals.concat(C.pools.countries, C.pools.money);
+    var all = C.pools.animals.concat(C.pools.countries, C.pools.prices);
     for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
     return null;
   }
   function rawById(id) {
-    var lists = [D.items.animals, D.items.countries, D.items.money, BASEDATA.animals, BASEDATA.countries];
-    if (ORIG) lists.push(ORIG.items.animals, ORIG.items.countries, ORIG.items.money);
+    var lists = [D.items.animals, D.items.countries, D.items.prices, BASEDATA.animals, BASEDATA.countries];
+    if (ORIG) lists.push(ORIG.items.animals, ORIG.items.countries, ORIG.items.prices);
     for (var i = 0; i < lists.length; i++) {
       for (var j = 0; j < (lists[i] || []).length; j++) if (lists[i][j].id === id) return lists[i][j];
     }
@@ -265,7 +272,7 @@
   }
   function allIds() {
     var ids = [];
-    [D.items.animals, D.items.countries, D.items.money, BASEDATA.animals, BASEDATA.countries].forEach(function (l) {
+    [D.items.animals, D.items.countries, D.items.prices, BASEDATA.animals, BASEDATA.countries].forEach(function (l) {
       (l || []).forEach(function (r) { ids.push(r.id); });
     });
     return ids;
@@ -279,22 +286,20 @@
   // ---------- связи: где используется объект ----------
   function trapLists() {
     var out = [];
-    function add(t) { if (t && typeof t === 'object') ['animals', 'countries'].forEach(function (k) { if (Array.isArray(t[k])) out.push(t[k]); }); }
+    function add(t) { if (t && typeof t === 'object') KINDS.forEach(function (k) { if (Array.isArray(t[k])) out.push(t[k]); }); }
     add(D.game.traps);
     D.game.events.forEach(function (e) { add(e && e.traps); });
     return out;
   }
   function uses(id) {
-    var u = { claims: [], prices: [], traps: 0 };
+    var u = { claims: [], traps: 0 };
     D.claims.claims.forEach(function (c, i) { if (c && (c.target === id || c.ref === id)) u.claims.push(i); });
-    D.claims.prices.forEach(function (p, i) { if (p && p.item === id) u.prices.push(i); });
     trapLists().forEach(function (list) { list.forEach(function (p) { if (p[0] === id || p[1] === id) u.traps++; }); });
     return u;
   }
   function usesText(u) {
     var parts = [];
     if (u.claims.length) parts.push(count(u.claims.length, CLAIMS));
-    if (u.prices.length) parts.push(count(u.prices.length, TASKS));
     if (u.traps) parts.push(count(u.traps, TRAPS));
     return parts.join(', ');
   }
@@ -304,22 +309,29 @@
       for (var i = list.length - 1; i >= 0; i--) if (list[i][0] === id || list[i][1] === id) list.splice(i, 1);
     });
   }
-  // Эталон для заявления о новом объекте: человек для зверей, иначе — кто отличается примерно в 3 раза
+  // Эталон для заявления о новом объекте: человек для зверей, мороженое для цен,
+  // иначе — кто отличается примерно в 3 раза (в ценах — понятная единица, раз в 15 дешевле)
   function partner(it, cat) {
-    var pool = C.pools[cat].filter(function (r) { return r.id !== it.id; });
-    var range = (C.cfg.ratio && C.cfg.ratio[cat]) || [1.2, 15];
+    var price = cat === 'prices';
+    var pool = C.pools[cat].filter(function (r) { return r.id !== it.id && (!price || (r.perWeek && r.value < it.value)); });
+    var range = (C.cfg.ratio && C.cfg.ratio[cat]) || (price ? [3, 50] : [1.2, 15]);
     function k(r) { return Math.max(it.value / r.value, r.value / it.value); }
-    var human = cat === 'animals' && findItem('human');
-    if (human && human.id !== it.id && k(human) >= range[0] && k(human) <= range[1]) return human;
-    var best = null, bestD = Infinity;
+    var first = cat === 'animals' ? findItem('human') : price ? findItem('icecream') : null;
+    if (first && pool.indexOf(first) >= 0 && k(first) >= range[0] && k(first) <= range[1]) return first;
+    var best = null, bestD = Infinity, aim = price ? 15 : 3;
     pool.forEach(function (r) {
-      var d = Math.abs(Math.log(k(r) / 3));
+      var d = Math.abs(Math.log(k(r) / aim));
       if (k(r) >= range[0] && k(r) <= range[1] && d < bestD) { best = r; bestD = d; }
     });
     return best || pool[0] || null;
   }
-  // Заявление-фейк «в 2 раза больше правды» — текст тот же, каким игра пишет заявления сама
+  // Заявление-фейк «в 2 раза больше правды» — текст тот же, каким игра пишет заявления сама.
+  // В ценах — как в рекламе: «Самокат — всего 13 мороженых!», в 3 раза дешевле правды.
   function starterClaim(it, ref) {
+    if (it.kind === 'price') {
+      var k = it.value / ref.value / 3, n = k >= 2 ? Math.round(k) : P.round(k);
+      return { target: it.id, ref: ref.id, says: n, source: 'ad', text: it.name + ' — всего ' + P.count(n, ref) + '!', why: '' };
+    }
     var s = App.content.sayText(it, ref, 2 * it.value / ref.value);
     return { target: it.id, ref: ref.id, says: s.says, source: it.kind === 'country' ? 'map' : 'rumor', text: s.text, why: '' };
   }
@@ -360,21 +372,20 @@
   // ---------- сводка ----------
   function renderSummary() {
     var cfg = C.cfg, ev = C.event;
-    var all = C.claims.animals.concat(C.claims.countries);
+    var all = C.claims.animals.concat(C.claims.countries, C.claims.prices);
     var truths = all.filter(function (c) { return c.isTrue; }).length;
-    var off = { claim: 0, price: 0, trap: 0 };
-    (C.off || []).forEach(function (o) { off[o.type]++; });
+    var units = C.pools.prices.filter(function (x) { return x.perWeek; }).length;
+    var off = { claim: 0, trap: 0 };
+    (C.off || []).forEach(function (o) { if (off[o.type] !== undefined) off[o.type]++; });
     var offParts = [];
     if (off.claim) offParts.push(count(off.claim, CLAIMS));
-    if (off.price) offParts.push(count(off.price, TASKS));
     if (off.trap) offParts.push(count(off.trap, TRAPS));
     $('summary').innerHTML = (C.errors.length
       ? '<ul class="errors">' + C.errors.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'
       : '<p class="ok">✅ Ошибок нет — всё загрузится в игре</p>') +
       (offParts.length ? '<p class="muted">⏸ Отключено вместе с убранными объектами: ' + offParts.join(', ') + '. Вернёте объект — вернутся и они.</p>' : '') +
       '<div class="facts"><span>🐾 Зверей: <b>' + C.pools.animals.length + '</b></span><span>🌍 Стран: <b>' + C.pools.countries.length + '</b></span>' +
-      '<span>🛍️ Вещей: <b>' + C.pools.money.length + '</b></span><span>🕵️ Заявлений: <b>' + all.length + '</b> (правды ' + truths + ')</span>' +
-      '<span>💰 Цен в купюрах: <b>' + (C.tasks || []).length + '</b></span>' +
+      '<span>🛒 Вещей с ценой: <b>' + C.pools.prices.length + '</b> (понятных единиц ' + units + ')</span><span>🕵️ Заявлений: <b>' + all.length + '</b> (правды ' + truths + ', про цены ' + C.claims.prices.length + ')</span>' +
       '<span>Раундов: <b>' + cfg.rounds + '</b></span></div>' +
       '<p>' + (ev ? 'Событие на эту дату: <span class="event-badge">' + esc(ev.title) + '</span> ' + esc(ev.text || '') : '<span class="muted">На эту дату событий нет.</span>') + '</p>';
   }
@@ -384,20 +395,19 @@
     $('new-box').hidden = tab !== 'new';
     if (tab === 'claims') return renderClaims();
     if (tab === 'texts') return renderTexts();
-    if (tab === 'prices') return renderPrices();
     if (tab === 'new') { $('panel').innerHTML = ''; return updatePreview(); }
     renderObjects(tab);
   }
 
   // Заявления
   function claimOf(i) {
-    var all = C.claims.animals.concat(C.claims.countries);
+    var all = C.claims.animals.concat(C.claims.countries, C.claims.prices);
     for (var k = 0; k < all.length; k++) if (all[k].uid === 'c' + i) return all[k];
     return null;
   }
   function options(selected, cats) {
-    // заявления «фейк или правда» — только про зверей и карты; деньги — задачи «цена в купюрах»
-    var html = (cats || ['animals', 'countries']).map(function (cat) {
+    // в заявлении оба объекта из одной темы: зверь со зверем, страна со страной, вещь с вещью
+    var html = (cats || KINDS).map(function (cat) {
       return '<optgroup label="' + CATS[cat] + '">' + C.pools[cat].map(function (it) {
         return '<option value="' + esc(it.id) + '"' + (it.id === selected ? ' selected' : '') + '>' + esc(it.name) + '</option>';
       }).join('') + '</optgroup>';
@@ -406,30 +416,25 @@
     if (selected && !findItem(selected)) html = '<option value="' + esc(selected) + '" selected>' + esc(nameOf(selected)) + ' — убран из игры</option>' + html;
     return html;
   }
-  function payOptions(sel) {
-    var PAY = App.content.PAY;
-    return Object.keys(PAY).map(function (k) {
-      return '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + PAY[k].rub + ' ₽ — ' + esc(PAY[k].of) + '</option>';
-    }).join('');
-  }
   function offNote(off, what) {
     return '<div class="verdict off">⏸ Отключено: «' + esc(off.ids.map(nameOf).join('», «')) + '» убран из игры. Вернёте объект — вернётся и ' + what + '.</div>';
   }
   function renderClaims() {
     var srcs = D.claims.sources;
     var html = '<div class="toolbar"><button class="btn go" data-act="cadd">➕ Новое заявление</button>' +
-      '<span class="muted">«Во сколько раз больше» — как утверждает заявление (для стран — по площади; меньше 1 — значит меньше). Правда это или фейк, игра посчитает сама.</span></div><div class="grid">';
+      '<span class="muted">«Во сколько раз больше» — как утверждает заявление (для стран — по площади; меньше 1 — значит меньше). В ценах — сколько эталонов стоит вещь: «всего 10 мороженых» — это 10. Правда это или фейк, игра посчитает сама.</span></div><div class="grid">';
     html += D.claims.claims.map(function (c, i) {
-      var cl = claimOf(i), off = offOf('c' + i);
+      var cl = claimOf(i), off = offOf('c' + i), t = findItem(c.target), price = !!t && t.kind === 'price';
+      var truth = cl && price ? ' · на деле ' + P.count(cl.target.value / cl.ref.value, cl.ref) : '';
       var v = off ? offNote(off, 'заявление')
         : !cl ? '<div class="verdict err">⚠️ Ошибка: оба объекта должны существовать и быть из одной темы, число — больше нуля</div>'
-        : cl.isTrue ? '<div class="verdict true">✅ ПРАВДА</div>'
-        : '<div class="verdict fake">🕵️ ФЕЙК — ' + (cl.g0 >= 1 ? 'преувеличивает' : 'преуменьшает') + ' в ' + U.fmtRatio(cl.target.kind === 'country' ? Math.pow(Math.max(cl.g0, 1 / cl.g0), 2) : Math.max(cl.g0, 1 / cl.g0)) + ' раза</div>';
+        : cl.isTrue ? '<div class="verdict true">✅ ПРАВДА' + esc(truth) + '</div>'
+        : '<div class="verdict fake">🕵️ ФЕЙК — ' + (cl.g0 >= 1 ? 'преувеличивает' : 'преуменьшает') + ' в ' + U.fmtRatio(cl.target.kind === 'country' ? Math.pow(Math.max(cl.g0, 1 / cl.g0), 2) : Math.max(cl.g0, 1 / cl.g0)) + ' раза' + esc(truth) + '</div>';
       return '<div class="card' + (cl ? '' : off ? ' off' : ' bad') + '" data-i="' + i + '">' + v +
         '<label>Заявление<textarea data-c="text">' + esc(c.text) + '</textarea></label>' +
         '<div class="row"><label>Кого проверяем<select data-c="target">' + options(c.target) + '</select></label>' +
         '<label>Эталон<select data-c="ref">' + options(c.ref) + '</select></label></div>' +
-        '<div class="row"><label>Во сколько раз больше<input data-c="says" type="number" step="any" value="' + esc(c.says) + '"></label>' +
+        '<div class="row"><label>' + (price ? 'Сколько эталонов стоит' : 'Во сколько раз больше') + '<input data-c="says" type="number" step="any" value="' + esc(c.says) + '"></label>' +
         '<label>Источник<select data-c="source">' + Object.keys(srcs).map(function (k) {
           return '<option value="' + k + '"' + (k === c.source ? ' selected' : '') + '>' + esc(srcs[k]) + '</option>';
         }).join('') + '</select></label></div>' +
@@ -440,30 +445,7 @@
     $('panel').innerHTML = html + '</div>';
   }
 
-  // «Цена в купюрах»: вещь, цена, чем платим — стопку игра строит сама
-  function renderPrices() {
-    var html = '<div class="toolbar"><button class="btn go" data-act="padd">➕ Новая задача</button>' +
-      '<span class="muted">Режим «Деньги» целиком состоит из этих задач. Вещь из вкладки «Деньги: вещи», цена в рублях и чем платим. Первая задача в списке — первый раунд режима. Игра посчитает, сколько купюр или монет нужно, и построит стопку. Текст задания можно не писать — он соберётся сам.</span></div><div class="grid">';
-    html += D.claims.prices.map(function (p, i) {
-      var t = null, off = offOf('p' + i);
-      (C.tasks || []).forEach(function (x) { if (x.uid === 'p' + i) t = x; });
-      var head = t ? '<div class="verdict true">→ ' + esc(t.why.split('. ')[0]) + ' · стопка ' + U.fmtLen(t.target.value) + '</div>' +
-          '<svg viewBox="0 0 200 110">' + scene([t.ref, t.target], 200, 110) + '</svg>'
-        : off ? offNote(off, 'задача')
-        : '<div class="verdict err">⚠️ Ошибка: выберите вещь, цену больше нуля и чем платим</div>';
-      return '<div class="card' + (t ? '' : off ? ' off' : ' bad') + '" data-p="' + i + '">' + head +
-        '<div class="row"><label>Вещь<select data-pf="item">' + options(p.item, ['money']) + '</select></label>' +
-        '<label>Цена, ₽<input data-pf="price" type="number" step="any" value="' + esc(p.price) + '"></label></div>' +
-        '<label>Чем платим<select data-pf="pay">' + payOptions(p.pay) + '</select></label>' +
-        '<label>Текст задания (необязательно)<textarea data-pf="text" placeholder="' + esc(t ? t.text : '') + '">' + esc(p.text || '') + '</textarea></label>' +
-        '<label>Вывод после ответа (необязательно)<textarea data-pf="why">' + esc(p.why || '') + '</textarea></label>' +
-        '<div class="card-actions">' + (t ? tryBtn('task=p' + i) : '') +
-        '<button class="btn small warn" data-act="pdel">🗑 Удалить задачу</button></div></div>';
-    }).join('');
-    $('panel').innerHTML = html + '</div>';
-  }
-
-  // Звери, страны, деньги
+  // Звери, страны, вещи с ценой
   function objects(cat) {
     var manual = {};
     D.items[cat].forEach(function (r) { manual[r.id] = true; });
@@ -482,38 +464,55 @@
   // Строка «где используется»: так видно, что уйдёт и что вернётся вместе с объектом
   function usesLine(id, cat) {
     var ut = usesText(uses(id));
-    if (cat === 'money') {
-      return uses(id).prices.length ? '<div class="uses">В игре: ' + ut + ' <button class="btn small" data-act="oprice">➕ Ещё задача</button></div>'
-        : '<div class="uses warn">⚠️ Нет ни одной задачи — в режиме «Деньги» вещь не появится. <button class="btn small go" data-act="oprice">➕ Задача с этой вещью</button></div>';
-    }
-    return '<div class="uses">' + (ut ? 'В игре: ' + ut : 'Своих заявлений нет — игра берёт объект в случайные пары') +
+    return '<div class="uses">' + (ut ? 'В игре: ' + ut : cat === 'prices' ? 'Своих заявлений нет — игра сама ставит вещь в пары с понятными единицами' : 'Своих заявлений нет — игра берёт объект в случайные пары') +
       ' <button class="btn small" data-act="oclaim">➕ Заявление</button></div>';
+  }
+  // Вещь с ценой глазами ребёнка: единица — «каждый будний день = 500 ₽ в неделю»,
+  // цель — «= 40 мороженых · 10 билетов в кино»: сразу видно, правдоподобна ли цена
+  function priceLine(it) {
+    if (it.perWeek) return '<div class="uses">🍦 Понятная единица: ' + esc(P.often(it.perWeek)) + ' — ' + U.fmt(it.value * it.perWeek) + ' ₽ в неделю</div>';
+    var units = C.pools.prices.filter(function (u) { return u.perWeek && u.value < it.value; }).slice(0, 4);
+    return '<div class="uses">🎯 Цель' + (units.length ? ': ' + units.map(function (u) { return esc(P.count(it.value / u.value, u)); }).join(' · ') : ' — добавьте понятные единицы дешевле неё') + '</div>';
+  }
+  function fieldsOf(o, cat) {
+    if (cat === 'countries') return '<div class="row"><label>Площадь, км²<input data-f="area" type="number" step="any" value="' + esc(field(o, 'area')) + '"></label></div>';
+    if (cat === 'prices') {
+      var forms = field(o, 'forms');
+      return '<div class="row"><label>Цена, ₽<input data-f="price" type="number" step="any" value="' + esc(field(o, 'price')) + '"></label>' +
+        '<label>Покупают раз в неделю<input data-f="perWeek" type="number" step="any" placeholder="пусто — это цель" value="' + esc(field(o, 'perWeek')) + '"></label></div>' +
+        '<div class="row"><label>Как считать: 1, 2, 5 штук<input data-f="forms" value="' + esc(Array.isArray(forms) ? forms.join(', ') : '') + '" placeholder="' + esc(P.forms(field(o, 'name') || '').join(', ')) + '"></label>' +
+        '<label>Копить «без…»<input data-f="without" placeholder="без мороженого" value="' + esc(field(o, 'without')) + '"></label></div>';
+    }
+    return '<div class="row"><label>Размер, м<input data-f="size" type="number" step="any" value="' + esc(field(o, 'size')) + '"></label>' +
+      '<label>Измерение<select data-f="dim">' + Object.keys(DIMS).map(function (k) {
+        return '<option value="' + k + '"' + (k === field(o, 'dim') ? ' selected' : '') + '>' + DIMS[k] + '</option>';
+      }).join('') + '</select></label></div>';
   }
   function renderObjects(cat) {
     var hidden = D.items.hidden;
     var human = findItem('human');
     var list = objects(cat);
     var html = '<div class="toolbar"><button class="btn go" data-act="gonew">➕ Добавить по картинке</button>' +
-      '<span class="muted">Правки встроенных объектов сохраняются как поправки в items.json — большие файлы с силуэтами не меняются. Убранный объект забирает с собой свои заявления и задачи, а вернётся — вернёт и их.</span></div><div class="grid">';
+      '<span class="muted">' + (cat === 'prices'
+        ? 'Вещи для режима «Цены»: цели (самокат, смартфон) и понятные единицы (мороженое, пицца) — у единицы заполнено «Покупают раз в неделю». Цены меняются здесь, без релиза. Убранная вещь забирает с собой свои заявления, а вернётся — вернёт и их.'
+        : 'Правки встроенных объектов сохраняются как поправки в items.json — большие файлы с силуэтами не меняются. Убранный объект забирает с собой свои заявления, а вернётся — вернёт и их.') +
+      '</span></div><div class="grid">';
     html += list.filter(function (o) { return hidden.indexOf(o.id) < 0; }).map(function (o) {
       var it = findItem(o.id);
       var pic = it ? '<svg viewBox="0 0 200 110">' + scene(cat === 'animals' && human && it !== human ? [human, it] : [it], 200, 110) + '</svg>'
-        : '<div class="verdict err">⚠️ Не загрузилось — проверьте размер и картинку</div>';
-      var isCountry = cat === 'countries';
-      var src = o.origin === 'base' ? '✏️ встроенный (' + (isCountry ? 'countries.json' : 'animals.json') + ')'
+        : '<div class="verdict err">⚠️ Не загрузилось — проверьте ' + (cat === 'prices' ? 'цену' : 'размер') + ' и картинку</div>';
+      var src = o.origin === 'base' ? '✏️ встроенный (' + (cat === 'countries' ? 'countries.json' : 'animals.json') + ')'
         : '🖼 ' + (/^data:/.test(o.raw.image || '') ? 'новая картинка — уйдёт в игру при публикации' : esc(o.raw.image || ''));
       return '<div class="card' + (it ? '' : ' bad') + '" data-cat="' + cat + '" data-id="' + esc(o.id) + '" data-origin="' + o.origin + '" data-idx="' + (o.idx == null ? '' : o.idx) + '">' +
         pic + '<div class="src">id: ' + esc(o.id) + ' · ' + src + '</div>' +
+        (it && cat === 'prices' ? priceLine(it) : '') +
         '<label>Название<input data-f="name" value="' + esc(field(o, 'name')) + '"></label>' +
-        '<div class="row">' + (isCountry
-          ? '<label>Площадь, км²<input data-f="area" type="number" step="any" value="' + esc(field(o, 'area')) + '"></label>'
-          : '<label>Размер, м<input data-f="size" type="number" step="any" value="' + esc(field(o, 'size')) + '"></label>' +
-            '<label>Измерение<select data-f="dim">' + Object.keys(DIMS).map(function (k) {
-              return '<option value="' + k + '"' + (k === field(o, 'dim') ? ' selected' : '') + '>' + DIMS[k] + '</option>';
-            }).join('') + '</select></label>') + '</div>' +
-        '<label>Факт «ЧЕГО?!»<textarea data-f="fact">' + esc(field(o, 'fact')) + '</textarea></label>' +
+        fieldsOf(o, cat) +
+        '<label>' + (cat === 'prices' ? 'Совет или факт после ответа' : 'Факт «ЧЕГО?!»') + '<textarea data-f="fact">' + esc(field(o, 'fact')) + '</textarea></label>' +
         (it ? usesLine(o.id, cat) : '') +
         '<div class="card-actions">' + (it ? tryBtn('try=' + o.id) : '') +
+        // свой объект можно и удалить, и убрать на время — со всеми заявлениями, чтобы потом вернуть
+        (o.origin === 'manual' ? '<button class="btn small" data-act="ohide">⏸ Убрать на время</button>' : '') +
         '<button class="btn small warn" data-act="odel">🗑 ' + (o.origin === 'base' ? 'Убрать из игры' : 'Удалить') + '</button></div></div>';
     }).join('');
     html += '</div>';
@@ -531,7 +530,7 @@
   // Тексты и события
   function renderTexts() {
     var t = D.game.texts, l = D.game.lessons;
-    var lessons = [['detector', '🕵️ Главный урок'], ['animals', '🐾 Урок про зверей'], ['countries', '🗺️ Урок про карты'], ['area', '📐 Урок про площадь'], ['money', '💰 Урок про деньги']];
+    var lessons = [['detector', '🕵️ Главный урок'], ['animals', '🐾 Урок про зверей'], ['countries', '🗺️ Урок про карты'], ['area', '📐 Урок про площадь'], ['prices', '🛒 Урок про цены']];
     var html = '<div class="wide">' +
       '<label>Подзаголовок на старте (**жирный**, перенос строки — Enter)<textarea data-t="texts.tagline">' + esc(t.tagline) + '</textarea></label>' +
       '<label>Реплики Капи — по одной в строке<textarea data-t="texts.capy" rows="6">' + esc((t.capy || []).join('\n')) + '</textarea></label>' +
@@ -551,10 +550,13 @@
 
   // ---------- правки ----------
   function setObj(card, f, raw) {
-    var v = f === 'size' || f === 'area' ? num(raw) : raw;
+    var v = f === 'size' || f === 'area' || f === 'price' || f === 'perWeek' ? num(raw)
+      : f === 'forms' ? raw.split(',').map(function (s) { return s.trim(); }).filter(Boolean) : raw;
     var cat = card.getAttribute('data-cat'), id = card.getAttribute('data-id');
     if (card.getAttribute('data-origin') === 'manual') {
-      D.items[cat][+card.getAttribute('data-idx')][f] = v;
+      // пустое поле — значит «нет»: вещь без perWeek — цель, без forms формы подберутся сами
+      var rec = D.items[cat][+card.getAttribute('data-idx')];
+      if (v === undefined || v === '' || (Array.isArray(v) && !v.length)) delete rec[f]; else rec[f] = v;
       return;
     }
     var base = (BASEDATA[cat] || []).filter(function (r) { return r.id === id; })[0] || {};
@@ -577,18 +579,19 @@
       D.claims.claims[+card.getAttribute('data-i')][f] = f === 'says' ? num(t.value) : t.value;
     } else if (t.hasAttribute('data-t')) setPath(t.getAttribute('data-t'), t.value);
     else if (t.hasAttribute('data-ev')) D.game.events[+card.getAttribute('data-e')][t.getAttribute('data-ev')] = t.value;
-    else if (t.hasAttribute('data-pf')) {
-      var pf = t.getAttribute('data-pf'), pr = D.claims.prices[+card.getAttribute('data-p')];
-      if (pf === 'price') pr.price = num(t.value);
-      else if ((pf === 'text' || pf === 'why') && !t.value.trim()) delete pr[pf];
-      else pr[pf] = t.value;
-    }
     else return;
     save();
   });
   // после ухода из поля — перепроверяем всё движком игры
   panel.addEventListener('change', function () { refreshSoon(); });
 
+  // Убрать из игры без удаления: заявления и пары отключаются, «Вернуть» — и всё на месте
+  function hideItem(id) {
+    var ut = usesText(uses(id));
+    if (!confirm('Убрать «' + nameOf(id) + '» из игры?' + (ut ? '\n\nВместе с ним отключатся: ' + ut + '. Вернёте объект — вернутся и они.' : ''))) return false;
+    if (D.items.hidden.indexOf(id) < 0) D.items.hidden.push(id);
+    return true;
+  }
   function act(b) {
     var a = b.getAttribute('data-act'), card = b.closest('.card');
     var id = card && card.getAttribute('data-id'), cat = card && card.getAttribute('data-cat');
@@ -601,22 +604,12 @@
     } else if (a === 'cdel') {
       if (!confirm('Удалить это заявление?')) return;
       D.claims.claims.splice(+card.getAttribute('data-i'), 1);
-    } else if (a === 'padd') {
-      if (!C.pools.money.length) return alert('Сначала добавьте вещь во вкладке «Деньги: вещи»');
-      D.claims.prices.unshift({ item: C.pools.money[0].id, price: 50000, pay: 'note1000' });
-    } else if (a === 'pdel') {
-      if (!confirm('Удалить эту задачу?')) return;
-      D.claims.prices.splice(+card.getAttribute('data-p'), 1);
     } else if (a === 'oclaim') {
-      var it = findItem(id), ref = it && partner(it, cat);
-      if (!ref) return alert('Не с кем сравнить — нужен ещё хотя бы один объект этой темы');
-      D.claims.claims.unshift(starterClaim(it, ref));
+      var it = findItem(id), pair = it && claimPair(it, cat);
+      if (!pair) return alert(cat === 'prices' ? 'Не с чем сравнить — нужна понятная единица дешевле (или вещь дороже, если это сама единица)' : 'Не с кем сравнить — нужен ещё хотя бы один объект этой темы');
+      D.claims.claims.unshift(starterClaim(pair[0], pair[1]));
       tab = 'claims';
-      notice('Добавлено заявление про «' + esc(it.name) + '» с эталоном «' + esc(ref.name) + '» — поправьте текст, если нужно. ' + tryBtn('claim=c0'));
-    } else if (a === 'oprice') {
-      D.claims.prices.unshift({ item: id, price: 1000, pay: 'note100' });
-      tab = 'prices';
-      notice('Добавлена задача с вещью «' + esc(nameOf(id)) + '» — укажите цену и чем платим. ' + tryBtn('task=p0'));
+      notice('Добавлено заявление: «' + esc(pair[0].name) + '» с эталоном «' + esc(pair[1].name) + '» — поправьте текст, если нужно. ' + tryBtn('claim=c0'));
     } else if (a === 'odel') {
       var u = uses(id), ut = usesText(u), name = nameOf(id);
       if (card.getAttribute('data-origin') === 'manual') {
@@ -628,13 +621,11 @@
           if (!confirm('Удалить «' + name + '» из игры?' + (ut ? '\n\nВместе с ним удалятся: ' + ut + '.' : ''))) return;
           D.items[cat].splice(+card.getAttribute('data-idx'), 1);
           removeAt(D.claims.claims, u.claims);
-          removeAt(D.claims.prices, u.prices);
           dropTraps(id);
         }
-      } else {
-        if (!confirm('Убрать «' + name + '» из игры?' + (ut ? '\n\nВместе с ним отключатся: ' + ut + '. Вернёте объект — вернутся и они.' : ''))) return;
-        if (D.items.hidden.indexOf(id) < 0) D.items.hidden.push(id);
-      }
+      } else if (!hideItem(id)) return;
+    } else if (a === 'ohide') {
+      if (!hideItem(id)) return;
     } else if (a === 'unhide') {
       D.items.hidden = D.items.hidden.filter(function (x) { return x !== b.getAttribute('data-id'); });
     } else if (a === 'eadd') {
@@ -664,43 +655,84 @@
   ['dragenter', 'dragover'].forEach(function (ev) { $('drop').addEventListener(ev, function (e) { e.preventDefault(); this.classList.add('over'); }); });
   ['dragleave', 'drop'].forEach(function (ev) { $('drop').addEventListener(ev, function (e) { e.preventDefault(); this.classList.remove('over'); }); });
   $('drop').addEventListener('drop', function (e) { if (e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]); });
-  ['f-kind', 'f-id', 'f-name', 'f-size', 'f-dim', 'f-ref', 'f-fact'].forEach(function (id) { $(id).addEventListener('input', updatePreview); });
+  ['f-kind', 'f-id', 'f-name', 'f-size', 'f-dim', 'f-ref', 'f-fact', 'f-forms', 'f-week', 'f-without'].forEach(function (id) { $(id).addEventListener('input', updatePreview); });
 
+  // Как считать новую вещь: что вписал менеджер или подобранные формы
+  function formsOf(name) {
+    var f = $('f-forms').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    return f.length === 3 ? f : P.forms(name);
+  }
   function newItem() {
-    var cat = $('f-kind').value, country = cat === 'countries';
-    var it = { kind: country ? 'country' : 'animal', id: $('f-id').value.trim() || 'new', name: $('f-name').value.trim() || 'Новый объект',
+    var cat = $('f-kind').value, country = cat === 'countries', price = cat === 'prices';
+    var name = $('f-name').value.trim() || 'Новый объект';
+    var it = { kind: price ? 'price' : country ? 'country' : 'animal', id: $('f-id').value.trim() || 'new', name: name,
       value: num($('f-size').value) || 1, dim: $('f-dim').value, axis: $('f-dim').value === 'tall' ? 'h' : 'w', image: dropped.url };
-    it.dimText = country ? 'по площади' : DIMS[it.dim];
+    it.dimText = price ? '' : country ? 'по площади' : DIMS[it.dim];
+    if (price) {
+      it.forms = formsOf(name);
+      var w = num($('f-week').value);
+      if (typeof w === 'number' && w > 0) { it.perWeek = w; it.without = $('f-without').value.trim(); }
+    }
     return it;
   }
+  // Пара для заявления о вещи с ценой: цель — с единицей, а новая единица — с вещью подороже
+  function claimPair(it, cat) {
+    if (cat !== 'prices' || !it.perWeek) { var r = partner(it, cat); return r ? [it, r] : null; }
+    var goals = C.pools.prices.filter(function (t) { return t.id !== it.id && t.value > it.value * 3; });
+    goals.sort(function (a, b) { return Math.abs(Math.log(a.value / it.value / 15)) - Math.abs(Math.log(b.value / it.value / 15)); });
+    if (goals.length) return [goals[0], it];
+    var r2 = partner(it, cat);
+    return r2 ? [it, r2] : null;
+  }
+  // Цены в предпросмотре — как на доске: тёмный столбик единицы и лаймовый — вещи
+  function priceScene(it, ref, W, H) {
+    var base = H - 30, room = base - 16, max = Math.max(it.value, ref.value);
+    var bw = 64, gap = 60, x0 = (W - bw * 2 - gap) / 2;
+    var hr = Math.max(3, ref.value / max * room), ht = Math.max(3, it.value / max * room);
+    function label(x, t) { return '<text x="' + (x + bw / 2) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="13" font-weight="700" fill="#221e4f">' + esc(t) + '</text>'; }
+    return '<rect x="' + x0 + '" y="' + (base - hr) + '" width="' + bw + '" height="' + hr + '" rx="5" fill="#2c2862"/>' +
+      '<rect x="' + (x0 + bw + gap) + '" y="' + (base - ht) + '" width="' + bw + '" height="' + ht + '" rx="6" fill="#b6ee3a" stroke="#221e4f" stroke-width="3"/>' +
+      '<line x1="0" x2="' + W + '" y1="' + base + '" y2="' + base + '" stroke="rgba(34,30,79,.28)" stroke-width="2"/>' +
+      label(x0, ref.name + ' ' + U.fmt(ref.value) + ' ₽') + label(x0 + bw + gap, U.fmt(it.value) + ' ₽');
+  }
   function updatePreview() {
-    var cat = $('f-kind').value, country = cat === 'countries', money = cat === 'money';
-    $('l-size').firstChild.textContent = country ? 'Площадь, км² ' : 'Размер, м ';
-    $('l-dim').hidden = country;
-    $('l-ref').hidden = money;
-    $('l-claim').hidden = money;
-    $('l-price').hidden = !money;
-    $('l-pay').hidden = !money;
-    $('l-moneynote').hidden = !money;
-    // эталон — из той же темы: зверь со зверем, страна со страной
-    if (C && !money && $('f-ref').getAttribute('data-cat') !== cat) {
-      var def = country ? 'australia' : 'human';
+    var cat = $('f-kind').value, country = cat === 'countries', price = cat === 'prices';
+    $('l-size').firstChild.textContent = price ? 'Цена, ₽ ' : country ? 'Площадь, км² ' : 'Размер, м ';
+    $('l-dim').hidden = country || price;
+    ['l-forms', 'l-week', 'l-without', 'l-pricenote'].forEach(function (id) { $(id).hidden = !price; });
+    $('l-ref').firstChild.textContent = price ? 'Сравнить с единицей ' : 'Эталон рядом ';
+    $('l-claim-text').textContent = price
+      ? 'Сразу добавить заявление-фейк, как в рекламе: «всего N …», в 3 раза дешевле правды. Новая единица (с «раз в неделю») встанет эталоном к вещи подороже. Текст можно поправить во вкладке «Заявления».'
+      : 'Сразу добавить заявление-фейк с этим эталоном («в 2 раза больше правды») — так объект точно попадёт в игру. Текст можно поправить во вкладке «Заявления».';
+    $('f-forms').placeholder = P.forms($('f-name').value.trim() || 'самокат').join(', ');
+    // эталон — из той же темы: зверь со зверем, страна со страной, вещь — с понятной единицей
+    if (C && $('f-ref').getAttribute('data-cat') !== cat) {
+      var def = price ? 'icecream' : country ? 'australia' : 'human';
       $('f-ref').innerHTML = options(findItem(def) ? def : '', [cat]);
       $('f-ref').setAttribute('data-cat', cat);
     }
-    if (C && !$('f-pay').options.length) $('f-pay').innerHTML = payOptions('note100');
     if (!dropped || !C) return;
     var it = newItem();
     App.assets.prepare(it).then(function () {
       $('preview').hidden = false;
       $('pv-error').hidden = true;
       $('btn-add').hidden = false;
-      var st = ['ref', 'g1', 'truth'].map(function (s) { var o = Object.assign({}, it); o._style = s; return o; });
+      var ref = findItem($('f-ref').value);
       $('pv-styles').setAttribute('viewBox', '0 0 300 220');
-      $('pv-styles').innerHTML = scene(st, 300, 220);
-      var ref = money ? findItem('phone') : findItem($('f-ref').value);
-      var g = Object.assign({}, it, { _style: 'g1' });
       $('pv-scale').setAttribute('viewBox', '0 0 300 220');
+      $('preview').classList.toggle('is-price', price);
+      $('pv-styles-note').textContent = price ? 'Так вещь видна в игре: значок под столбиком и в разборе «40 мороженых»' : 'Стили: эталон · догадка · правильный ответ';
+      if (price) {
+        // у вещи с ценой в игре только значок: под столбиком и в разборе «40 мороженых»
+        $('pv-styles').innerHTML = scene([Object.assign({}, it, { _style: 'ref' })], 300, 220);
+        $('pv-scale').innerHTML = ref ? priceScene(it, ref, 300, 220) : '';
+        $('pv-note').textContent = ref ? it.name + ' = ' + P.count(it.value / ref.value, ref) +
+          (it.perWeek ? '. Понятная единица: ' + P.often(it.perWeek) : '') : 'Выберите единицу для сравнения';
+        return;
+      }
+      var st = ['ref', 'g1', 'truth'].map(function (s) { var o = Object.assign({}, it); o._style = s; return o; });
+      $('pv-styles').innerHTML = scene(st, 300, 220);
+      var g = Object.assign({}, it, { _style: 'g1' });
       $('pv-scale').innerHTML = scene(ref ? [ref, g] : [Object.assign({}, it, { _style: 'ref' })], 300, 220);
       $('pv-note').textContent = ref ? 'В настоящем масштабе: ' + ref.name + ' (' + val(ref) + ') и ' + it.name + ' (' + val(it) + ')'
         : 'Контур; ' + (country ? 'площадь по пикселям подгоняется под ' + U.fmtArea(it.value) : 'размер ' + val(it));
@@ -711,30 +743,31 @@
       $('pv-error').textContent = '❌ ' + e.message;
     });
   }
-  // Новый объект сразу связывается с игрой: зверь и страна — с заявлением, вещь — с задачей
+  // Новый объект сразу связывается с игрой: получает заявление-фейк со своим эталоном
   $('btn-add').addEventListener('click', function () {
-    var cat = $('f-kind').value, id = $('f-id').value.trim(), country = cat === 'countries';
+    var cat = $('f-kind').value, id = $('f-id').value.trim(), country = cat === 'countries', price = cat === 'prices';
     if (!/^[a-z0-9_]+$/.test(id)) return alert('id — только латинские буквы, цифры и _ (например okapi)');
     if (allIds().indexOf(id) >= 0) return alert('Объект с таким id уже есть (в игре или среди убранных) — придумайте другой');
     var ext = (dropped.name.match(/\.(png|svg|webp)$/i) || ['', 'png'])[1].toLowerCase();
     var name = $('f-name').value.trim() || id;
     var rec = { id: id, name: name, image: dropped.url, fact: $('f-fact').value.trim(), _file: 'img/' + id + '.' + ext };
-    if (country) rec.area = num($('f-size').value); else { rec.size = num($('f-size').value); rec.dim = $('f-dim').value; }
+    var it = newItem();
+    if (price) {
+      rec.price = num($('f-size').value);
+      rec.forms = it.forms;
+      if (it.perWeek) { rec.perWeek = it.perWeek; if (it.without) rec.without = it.without; }
+    } else if (country) rec.area = num($('f-size').value);
+    else { rec.size = num($('f-size').value); rec.dim = $('f-dim').value; }
     D.items[cat].push(rec);
     var extra = '', q = 'try=' + id;
-    if (cat === 'money') {
-      var price = num($('f-price').value);
-      if (typeof price === 'number' && price > 0) {
-        D.claims.prices.unshift({ item: id, price: price, pay: $('f-pay').value });
-        extra = ' и задача «цена в купюрах»';
-        q = 'task=p0';
-      }
-    } else if ($('f-claim').checked) {
-      var ref = findItem($('f-ref').value);
-      var value = country ? rec.area : rec.size;
-      if (ref && typeof value === 'number' && value > 0) {
-        D.claims.claims.unshift(starterClaim({ kind: country ? 'country' : 'animal', name: name, value: value, id: id }, ref));
-        extra = ' и заявление-фейк с эталоном «' + ref.name + '»';
+    var value = price ? rec.price : country ? rec.area : rec.size;
+    if ($('f-claim').checked && typeof value === 'number' && value > 0) {
+      var me = { kind: price ? 'price' : country ? 'country' : 'animal', name: name, value: value, id: id, forms: it.forms, perWeek: it.perWeek };
+      // новая единица становится эталоном к вещи подороже, остальное — целью рядом с выбранным эталоном
+      var pair = price && me.perWeek ? claimPair(me, cat) : findItem($('f-ref').value) ? [me, findItem($('f-ref').value)] : null;
+      if (pair) {
+        D.claims.claims.unshift(starterClaim(pair[0], pair[1]));
+        extra = ' и заявление-фейк: «' + pair[0].name + '» с эталоном «' + pair[1].name + '»';
         q = 'claim=c0';
       }
     }
@@ -811,17 +844,22 @@
   // Что изменится у детей — человеческим языком; это же уходит в описание коммита
   function changes() {
     var out = [], p = pubJson();
-    ['animals', 'countries', 'money'].forEach(function (cat) {
+    KINDS.forEach(function (cat) {
       var was = ORIG.items[cat].map(function (r) { return r.id; }), now = p.items[cat].map(function (r) { return r.id; });
       now.forEach(function (id) { if (was.indexOf(id) < 0) out.push('Новый объект: ' + nameOf(id) + ' (' + CATS[cat].toLowerCase() + ')'); });
       was.forEach(function (id) { if (now.indexOf(id) < 0) out.push('Удалён объект: ' + nameOf(id)); });
+    });
+    // цены меняются без релиза — показываем каждую новую цену отдельно
+    p.items.prices.forEach(function (r) {
+      var o = ORIG.items.prices.filter(function (x) { return x.id === r.id; })[0];
+      if (!o || JSON.stringify(o) === JSON.stringify(r)) return;
+      out.push(o.price !== r.price ? 'Новая цена: ' + nameOf(r.id) + ' — ' + U.fmt(r.price || 0) + ' ₽ (было ' + U.fmt(o.price || 0) + ' ₽)' : 'Правки вещи: ' + nameOf(r.id));
     });
     p.items.hidden.forEach(function (id) { if (ORIG.items.hidden.indexOf(id) < 0) out.push('Убран из игры: ' + nameOf(id)); });
     ORIG.items.hidden.forEach(function (id) { if (p.items.hidden.indexOf(id) < 0) out.push('Возвращён в игру: ' + nameOf(id)); });
     if (JSON.stringify(ORIG.items.edits) !== JSON.stringify(p.items.edits)) out.push('Правки названий, размеров и фактов');
     if (!out.length && JSON.stringify(ORIG.items) !== JSON.stringify(p.items)) out.push('Правки объектов');
     if (JSON.stringify(ORIG.claims.claims) !== JSON.stringify(p.claims.claims)) out.push('Заявления: было ' + ORIG.claims.claims.length + ', стало ' + p.claims.claims.length);
-    if (JSON.stringify(ORIG.claims.prices) !== JSON.stringify(p.claims.prices)) out.push('Задачи «цена в купюрах»: было ' + ORIG.claims.prices.length + ', стало ' + p.claims.prices.length);
     if (JSON.stringify(ORIG.game) !== JSON.stringify(p.game)) out.push('Тексты, события и настройки игры');
     return out;
   }
@@ -874,7 +912,7 @@
     var repo = '/repos/' + enc(t.repo), dir = t.dir ? t.dir + '/' : '', branch = enc(t.branch);
     var images = out.images.filter(function (im) {
       // картинка уже лежит в игре — повторно не грузим
-      return !ORIG.items.animals.concat(ORIG.items.countries, ORIG.items.money).some(function (r) { return r.image === im.name; });
+      return !ORIG.items.animals.concat(ORIG.items.countries, ORIG.items.prices).some(function (r) { return r.image === im.name; });
     });
     publishing = true;
     $('pub-go').disabled = true;
@@ -960,7 +998,7 @@
         var live = normalize({ game: r[0] || {}, items: r[1] || {}, claims: r[2] || {} });
         if (FILES.every(function (k) { return JSON.stringify(live[k]) === JSON.stringify(pub[k]); })) {
           var touched = false;
-          ['animals', 'countries', 'money'].forEach(function (cat) {
+          KINDS.forEach(function (cat) {
             D.items[cat].forEach(function (rec) {
               images.forEach(function (im) { if (rec.image === im.url) { rec.image = im.name; delete rec._file; touched = true; } });
             });

@@ -29,17 +29,17 @@
   }
 
   // У SVG-файлов размер бывает в pt или вовсе не указан — задаём его по viewBox
-  function loadSource(url) {
+  function loadSource(url, max) {
     var m = /^data:image\/svg\+xml(;base64)?,(.*)$/i.exec(url);
-    if (m) return fromSvgText(m[1] ? decodeURIComponent(escape(atob(m[2]))) : decodeURIComponent(m[2]), 'SVG');
+    if (m) return fromSvgText(m[1] ? decodeURIComponent(escape(atob(m[2]))) : decodeURIComponent(m[2]), 'SVG', max);
     if (!/\.svg(\?|#|$)/i.test(url)) return loadImg(url);
     return fetch(url).then(function (r) {
       if (!r.ok) throw new Error(url + ': ' + r.status);
       return r.text();
-    }).then(function (txt) { return fromSvgText(txt, url); });
+    }).then(function (txt) { return fromSvgText(txt, url, max); });
   }
 
-  function fromSvgText(txt, url) {
+  function fromSvgText(txt, url, max) {
     return Promise.resolve().then(function () {
       var w = 0, h = 0;
       var vb = txt.match(/viewBox\s*=\s*"([^"]+)"/i);
@@ -51,7 +51,7 @@
         h = parseFloat((txt.match(/\sheight\s*=\s*"([\d.]+)/i) || [])[1]);
       }
       if (!(w > 0 && h > 0)) throw new Error(url + ': у SVG нет viewBox или размеров');
-      var k = MAX / Math.max(w, h);
+      var k = max / Math.max(w, h);
       txt = txt.replace(/<svg\b([^>]*)>/i, function (m, attrs) {
         attrs = attrs.replace(/\s(width|height)\s*=\s*"[^"]*"/gi, '');
         if (!vb) attrs += ' viewBox="0 0 ' + w + ' ' + h + '"';
@@ -62,10 +62,10 @@
   }
 
   // Обрезаем прозрачные поля и считаем закрашенные пиксели
-  function analyze(img) {
+  function analyze(img, max) {
     var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
     if (!nw || !nh) throw new Error('у картинки нулевой размер');
-    var k = Math.min(1, MAX / Math.max(nw, nh));
+    var k = Math.min(1, max / Math.max(nw, nh));
     var w = Math.max(1, Math.round(nw * k)), h = Math.max(1, Math.round(nh * k));
     var c = canvas(w, h);
     var x = c.getContext('2d');
@@ -125,27 +125,33 @@
 
   function url(c) { return c.toDataURL('image/png'); }
 
-  function build(path) {
-    if (!cache[path]) {
-      cache[path] = loadSource(path).then(analyze).then(function (a) {
+  // max — сторона растра; icon — нужен только тёмный силуэт (без догадки и ответа)
+  function build(path, max, icon) {
+    max = max || MAX;
+    var key = path + '|' + max + (icon ? '|icon' : '');
+    if (!cache[key]) {
+      cache[key] = loadSource(path, max).then(function (img) { return analyze(img, max); }).then(function (a) {
         var r = Math.max(2, Math.round(Math.max(a.w, a.h) * 0.012));
         var pad = Math.ceil(r * 1.6) + 1;
-        return {
-          w: a.w, h: a.h, filled: a.filled, pad: pad,
-          ref: url(tint(a.src, REF)),
-          g1: url(outlined(a.src, LIME, INK, r, pad)),
-          g2: url(outlined(a.src, PINK, INK, r, pad)),
-          truth: url(outlined(a.src, null, VIOLET, r * 1.3, pad))
-        };
+        var out = { w: a.w, h: a.h, filled: a.filled, pad: pad, ref: url(tint(a.src, REF)) };
+        if (!icon) {
+          out.g1 = url(outlined(a.src, LIME, INK, r, pad));
+          out.g2 = url(outlined(a.src, PINK, INK, r, pad));
+          out.truth = url(outlined(a.src, null, VIOLET, r * 1.3, pad));
+        }
+        return out;
       });
     }
-    return cache[path];
+    return cache[key];
   }
 
-  // Готовит объект игры: размеры в мире и слои-картинки
+  // Готовит объект игры: размеры в мире и слои-картинки.
+  // Вещи с ценой видны только значками (под столбиком и в разборе) — им хватает
+  // одного тёмного слоя 256 px: так загрузка в разы быстрее, а картинок можно добавлять сколько угодно.
   function prepare(item) {
     if (!item.image) return Promise.resolve(item);
-    return build(item.image).then(function (b) {
+    var icon = item.kind === 'price';
+    return build(item.image, icon ? 256 : MAX, icon).then(function (b) {
       item.vb = [0, 0, b.w, b.h];
       item.layers = b;
       if (item.kind === 'country') {
@@ -164,11 +170,11 @@
     });
   }
 
-  // Разметка слоя доски для объекта с картинкой
+  // Разметка слоя доски для объекта с картинкой (у значков есть только тёмный слой)
   function layer(item, which) {
     var b = item.layers;
-    var href = b[which];
-    var p = which === 'ref' ? 0 : b.pad;
+    var href = b[which] || b.ref;
+    var p = which === 'ref' || !b[which] ? 0 : b.pad;
     return '<image href="' + href + '" xlink:href="' + href + '" x="' + (-p) + '" y="' + (-p) + '" width="' + (b.w + p * 2) +
       '" height="' + (b.h + p * 2) + '" preserveAspectRatio="none"/>';
   }

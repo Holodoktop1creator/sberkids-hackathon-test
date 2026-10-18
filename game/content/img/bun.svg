@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 140">
+<defs><mask id="m"><path d="M10 116 Q10 26 100 20 Q190 26 190 116 Q190 132 174 132 H26 Q10 132 10 116 Z" fill="#fff"/>
+<path d="M14 108 Q100 126 186 108" fill="none" stroke="#000" stroke-width="7"/>
+<path d="M52 66 Q100 34 148 66" fill="none" stroke="#000" stroke-width="7" stroke-linecap="round"/>
+<ellipse cx="78" cy="90" rx="7" ry="4" fill="#000"/><ellipse cx="104" cy="84" rx="7" ry="4" fill="#000"/><ellipse cx="128" cy="92" rx="7" ry="4" fill="#000"/></mask></defs>
+<rect width="200" height="140" fill="#000" mask="url(#m)"/>
+</svg>

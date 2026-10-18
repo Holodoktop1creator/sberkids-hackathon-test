@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 130">
+<defs><mask id="m"><path d="M16 10 H224 Q232 10 232 18 V50 A15 15 0 0 0 232 80 V112 Q232 120 224 120 H16 Q8 120 8 112 V80 A15 15 0 0 0 8 50 V18 Q8 10 16 10 Z" fill="#fff"/>
+<path d="M172 22 V110" stroke="#000" stroke-width="6" stroke-dasharray="10 8"/>
+<path d="M88 38 L96 56 L116 58 L101 71 L105 91 L88 81 L71 91 L75 71 L60 58 L80 56 Z" fill="#000"/></mask></defs>
+<rect width="240" height="130" fill="#000" mask="url(#m)"/>
+</svg>

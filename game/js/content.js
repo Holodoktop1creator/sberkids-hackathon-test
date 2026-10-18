@@ -8,14 +8,14 @@
   //   animals.json   — звери с векторными силуэтами (собирается скриптом)
   //   countries.json — страны с контурами (собирается скриптом)
   //   items.json     — ручные добавления контент-менеджера: картинки PNG/SVG,
-  //                    правки и скрытие любых объектов по id
+  //                    вещи с ценами для режима «Цены», правки и скрытие любых объектов по id
   // Битые записи и картинки отбрасываются и попадают в errors, игра не падает.
   var DEFAULTS = {
     rounds: 8,
     boss: [4, 8],
     duelRounds: 5,
-    ratio: { animals: [1.2, 15], countries: [1.3, 40] },
-    traps: { animals: [], countries: [] },
+    ratio: { animals: [1.2, 15], countries: [1.3, 40], prices: [3, 50] },
+    traps: { animals: [], countries: [], prices: [] },
     ranks: [
       { min: 100, text: 'В точку' }, { min: 85, text: 'Отлично' }, { min: 65, text: 'Хорошо' },
       { min: 40, text: 'Тепло' }, { min: 15, text: 'Холодно' }, { min: 0, text: 'Мимо' }
@@ -23,10 +23,10 @@
     titles: [{ min: 0, name: 'Прикидчик' }],
     unlocks: [],
     lessons: {},
-    modes: { chaos: true, animals: true, countries: true, money: true, duel: true },
+    modes: { chaos: true, animals: true, countries: true, prices: true, duel: true },
     // «Сколько раз помещается»: ряд значков меньшего предмета в разборе раунда
     units: { show: true, max: 20 },
-    theme: { animals: '#ffe9c4', countries: '#dcefff', money: '#dbf6e8' },
+    theme: { animals: '#ffe9c4', countries: '#dcefff', prices: '#ffe4f1' },
     texts: {
       tagline: 'Фейк или правда? Растяни силуэт\nдо **настоящего** размера.',
       capy: ['Я Капи. Проверяю громкие заявления.'],
@@ -36,6 +36,7 @@
     events: []
   };
   var DIM = { long: 'в длину', tail: 'в длину с хвостом', tall: 'в высоту', diam: 'в диаметре' };
+  var KINDS = ['animals', 'countries', 'prices'];
 
   function isNum(v) { return typeof v === 'number' && isFinite(v) && v > 0; }
   function isStr(v) { return typeof v === 'string' && v.length > 0; }
@@ -92,6 +93,22 @@
     o.h = c.h * s;
     o.ready = true;
     return o;
+  }
+
+  // Вещь с ценой для режима «Цены»: цель (самокат, смартфон) или понятная единица (мороженое, пицца).
+  // У единицы есть perWeek — сколько раз в неделю её обычно покупают: отсюда «сколько копить».
+  // forms — как считать: «1 мороженое · 2 мороженых · 5 мороженых»; нет — подберутся сами.
+  function priceItem(p, base) {
+    if (!p || !isStr(p.id) || !isStr(p.name) || !isNum(p.price)) return null;
+    var o = { kind: 'price', id: p.id, name: p.name, fact: p.fact || '', value: p.price, dimText: '' };
+    var f = Array.isArray(p.forms) && p.forms.length === 3 && p.forms.every(isStr) ? p.forms : null;
+    o.forms = f ? f.map(function (x) { return x.trim(); }) : autoForms(p.name);
+    if (isNum(p.perWeek)) {
+      o.perWeek = p.perWeek;
+      o.without = isStr(p.without) ? p.without.trim() : '';
+    }
+    o.image = imagePath(base, p.image);
+    return o.image ? o : null;
   }
 
   function today() {
@@ -219,9 +236,9 @@
       }
       var animals = build((res[1] && res[1].animals || []).concat(extra.animals || []), animal, 'Звери');
       var countries = build((res[2] && res[2].countries || []).concat(extra.countries || []), country, 'Страны');
-      // деньги: вещи для задач «цена в купюрах» (смартфон, рюкзак…), стопки к ним игра строит сама
-      var money = build(extra.money || [], animal, 'Деньги');
-      var all = animals.concat(countries, money);
+      // цены: вещи и понятные единицы (мороженое, пицца…), столбики к ним игра строит сама
+      var prices = build(Array.isArray(extra.prices) ? extra.prices : [], priceItem, 'Цены');
+      var all = animals.concat(countries, prices);
       return Promise.all(all.map(function (it) {
         if (it.ready) return null;
         return App.assets.prepare(it).catch(function (e) { errors.push(it.name + ': ' + e.message); });
@@ -229,7 +246,7 @@
         var ok = function (it) { return it.ready; };
         var content = {
           cfg: cfg,
-          pools: { animals: animals.filter(ok), countries: countries.filter(ok), money: money.filter(ok) },
+          pools: { animals: animals.filter(ok), countries: countries.filter(ok), prices: prices.filter(ok) },
           event: activeEvent(cfg, date),
           errors: errors,
           // убранные менеджером объекты: всё, что на них ссылается, отключается вместе с ними
@@ -239,7 +256,6 @@
         };
         checkTraps(content);
         content.claims = buildClaims(res[4], content);
-        content.tasks = buildTasks(res[4], content);
         return content;
       });
     });
@@ -248,6 +264,12 @@
   function byId(pool, id) {
     for (var i = 0; i < pool.length; i++) if (pool[i].id === id) return pool[i];
     return null;
+  }
+
+  // Диапазон «во сколько раз» для случайных пар темы
+  function range(content, kind) {
+    var r = content.cfg.ratio && content.cfg.ratio[kind];
+    return Array.isArray(r) && isNum(r[0]) && isNum(r[1]) && r[0] <= r[1] ? r : DEFAULTS.ratio[kind];
   }
 
   // Ссылка на объект, который менеджер убрал из игры, — не ошибка: запись отключена вместе с ним
@@ -260,7 +282,7 @@
     var lists = [['пары-ловушки', content.cfg.traps]];
     if (content.event && content.event.traps) lists.push(['события «' + content.event.title + '»', content.event.traps]);
     lists.forEach(function (l) {
-      ['animals', 'countries'].forEach(function (kind) {
+      KINDS.forEach(function (kind) {
         (l[1][kind] || []).forEach(function (p) {
           var miss = [p[0], p[1]].filter(function (id) { return !byId(content.pools[kind], id); });
           if (!miss.length) return;
@@ -275,12 +297,13 @@
   // Источник заявления: подпись поста. Иконку к ключу рисует игра (game.js → SRC_ICON)
   var SOURCES = {
     social: 'В соцсетях пишут', movie: 'В кино показывают', photo: 'Вирусное фото',
-    map: 'На обычной карте', rumor: 'Говорят', cartoon: 'В мультиках', think: 'Многие думают'
+    map: 'На обычной карте', rumor: 'Говорят', cartoon: 'В мультиках', think: 'Многие думают',
+    ad: 'Реклама', friend: 'Говорит друг'
   };
   var TRUE_RANGE = Math.log(1.06);
 
-  // says — во сколько раз цель больше эталона «по словам» заявления.
-  // Отсюда стартовый размер белого силуэта: ребёнок видит ровно то, что обещает фейк.
+  // says — во сколько раз цель больше эталона «по словам» заявления (в ценах — сколько эталонов стоит цель).
+  // Отсюда стартовый размер лаймового силуэта или столбика: ребёнок видит ровно то, что обещает фейк.
   function makeClaim(t, r, says, source, text, why, sources) {
     var k = says * r.value / t.value;
     var g0 = t.kind === 'country' ? Math.sqrt(k) : k;
@@ -293,12 +316,12 @@
   }
 
   function buildClaims(raw, content) {
-    var out = { animals: [], countries: [] };
+    var out = { animals: [], countries: [], prices: [] };
     if (!raw || !Array.isArray(raw.claims)) return out;
     var sources = raw.sources && typeof raw.sources === 'object' ? raw.sources : {};
     raw.claims.forEach(function (c, i) {
       var kind = null, t = null, r = null;
-      ['animals', 'countries'].forEach(function (k) {
+      KINDS.forEach(function (k) {
         var a = byId(content.pools[k], c && c.target), b = byId(content.pools[k], c && c.ref);
         if (a && b && a !== b) { kind = k; t = a; r = b; }
       });
@@ -322,8 +345,13 @@
   function lowerName(it) { return it.kind === 'country' ? it.name : it.name.charAt(0).toLowerCase() + it.name.slice(1); }
 
   // Текст «X в N раз больше, чем Y» с округлённым числом — им пишет заявления игра,
-  // и им же редактор пишет заявление для нового объекта
+  // и им же редактор пишет заявление для нового объекта. В ценах — «X стоит как N мороженых».
   function sayText(t, r, says) {
+    if (t.kind === 'price') {
+      // про цены говорят круглыми числами: «как 3 пиццы», а не «как 3,4 пиццы»
+      var n = says >= 2 ? Math.round(says) : roundCount(says);
+      return { says: n, text: t.name + ' ' + costs(t) + ' как ' + countText(n, r) + '.' };
+    }
     var area = t.kind === 'country';
     var bigger = says >= 1;
     var x = bigger ? says : 1 / says;
@@ -334,99 +362,139 @@
     return { says: bigger ? x : 1 / x, text: text };
   }
 
-  // Заявление для любой пары: иногда правда, чаще враньё в 1,6–2,6 раза
+  // Заявление для любой пары: иногда правда, чаще враньё в 1,6–2,6 раза.
+  // Про цены врут чаще в меньшую сторону — так покупка кажется пустяком.
   function autoClaim(p, kind, forceFake) {
     var t = p.target, r = p.ref;
     var k = t.value / r.value;
     var isTrue = !forceFake && Math.random() < 0.25;
     var says = k;
     if (!isTrue) {
-      var lin = Math.random() < 0.5 ? U.rand(0.4, 0.62) : U.rand(1.6, 2.6);
+      var down = Math.random() < (kind === 'prices' ? 0.7 : 0.5);
+      var lin = down ? U.rand(0.4, 0.62) : U.rand(1.6, 2.6);
       says = k * (kind === 'countries' ? lin * lin : lin);
     }
     var s = sayText(t, r, says);
-    return makeClaim(t, r, s.says, 'rumor', s.text, '');
+    var src = kind === 'prices' ? U.pick(['ad', 'friend', 'rumor', 'think']) : 'rumor';
+    return makeClaim(t, r, s.says, src, s.text, '');
   }
 
-  // ---------- «Цена в купюрах» ----------
-  // Чем платим: номинал, толщина одной купюры или монеты (м), ширина (мм), как назвать
-  var PAY = {
-    note100: { rub: 100, t: 0.0001, w: 150, of: 'сторублёвок', forms: ['купюра', 'купюры', 'купюр'] },
-    note1000: { rub: 1000, t: 0.0001, w: 157, of: 'тысячных купюр', forms: ['купюра', 'купюры', 'купюр'] },
-    note5000: { rub: 5000, t: 0.0001, w: 157, of: 'пятитысячных купюр', forms: ['купюра', 'купюры', 'купюр'] },
-    coin10: { rub: 10, t: 0.0022, w: 22, of: 'десятирублёвых монет', forms: ['монета', 'монеты', 'монет'] },
-    coin1: { rub: 1, t: 0.0015, w: 20.5, of: 'рублёвых монет', forms: ['монета', 'монеты', 'монет'] }
-  };
-
-  // Стопка строится сама под любую цену: прямоугольник с «листами»
-  function stackItem(key, count) {
-    var pay = PAY[key];
-    var h = count * pay.t;
-    var W = pay.w, H = h * 1000;
-    var n = Math.min(40, count - 1), step = H / (n + 1), th = step * 0.22;
-    var d = 'M0 0H' + W + 'V' + H.toFixed(3) + 'H0Z';
-    for (var i = 1; i <= n; i++) {
-      var y = (step * i).toFixed(3);
-      d += 'M2 ' + y + 'H' + (W - 2) + 'v' + th.toFixed(3) + 'H2Z';
+  // ---------- Цены: «сколько это мороженых» ----------
+  // Как считать единицу, если менеджер не написал сам: прилагательные впереди — «летних»,
+  // «воздушных», дальше главное слово по окончанию, остальное без изменений («билетов в кино»)
+  function autoForms(name) {
+    var words = String(name).toLowerCase().trim().split(/\s+/), adj = [];
+    while (words.length > 1 && /(ый|ий|ой|ая|яя|ое|ее)$/.test(words[0])) {
+      var w = words.shift(), st = w.slice(0, -2);
+      adj.push([w, st + (/[гкхжчшщ]$/.test(st) || /(ий|яя|ее)$/.test(w) ? 'их' : 'ых')]);
     }
+    var f = nounForms(words.shift() || ''), rest = words.length ? ' ' + words.join(' ') : '';
+    return [0, 1, 2].map(function (i) {
+      return adj.map(function (x) { return i ? x[1] : x[0]; }).concat(f[i]).join(' ') + rest;
+    });
+  }
+  function nounForms(a) {
+    var s = a.slice(0, -1), s2 = a.slice(0, -2), f;
+    if (/(ое|ее)$/.test(a)) f = [a, s2 + 'ых', s2 + 'ых'];                                          // мороженое
+    else if (/[^аеёиоуыэюя]ка$/.test(a)) f = [a, s + 'и', s2 + (/[жчшщ]ка$/.test(a) ? 'е' : 'о') + 'к']; // булочка, шоколадка
+    else if (/[гкхжчшщ]а$/.test(a)) f = [a, s + 'и', s];                                             // книга
+    else if (/а$/.test(a)) f = [a, s + 'ы', s];                                                      // пицца
+    else if (/я$/.test(a)) f = [a, s + 'и', s + 'ь'];                                                // неделя
+    else if (/ь$/.test(a)) f = [a, s + 'я', s + 'ей'];                                               // рубль
+    else if (/й$/.test(a)) f = [a, s + 'я', s + 'ев'];                                               // музей
+    else if (/[жчшщ]$/.test(a)) f = [a, a + 'а', a + 'ей'];                                          // мяч
+    else if (/[аеёиоуыэюя]$/.test(a)) f = [a, a, a];                                                  // кино, кофе
+    else f = [a, a + 'а', a + 'ов'];                                                                 // самокат, билет
+    return f;
+  }
+
+  // «40 мороженых», «2,5 смартфона»: от 10 — целое число, меньше — с одним знаком
+  function roundCount(n) { return n >= 10 ? Math.round(n) : Math.round(n * 10) / 10; }
+  function countText(n, unit) {
+    var r = roundCount(n);
+    return U.fmtRatio(r) + ' ' + (r % 1 ? unit.forms[1] : U.plural(r, unit.forms));
+  }
+  // «Самокат стоит», «Наушники стоят»
+  function costs(t) { return /[иы]$/.test(t.name.split(' ')[0]) ? 'стоят' : 'стоит'; }
+  // «не покупать мороженое / булочку / пиццу»
+  function accName(it) {
+    var w = it.name.charAt(0).toLowerCase() + it.name.slice(1);
+    return w.replace(/^(\S+?)(ая|яя|а|я)(?=\s|$)/, function (m, stem, end) {
+      return stem + { 'ая': 'ую', 'яя': 'юю', 'а': 'у', 'я': 'ю' }[end];
+    });
+  }
+  // Как часто покупают единицу: 5 → «каждый будний день», 1 → «раз в неделю»
+  function often(pw) {
+    if (pw >= 6.5) return 'каждый день';
+    if (pw === 5) return 'каждый будний день';
+    if (pw >= 1.5) { var n = Math.round(pw); return n + ' ' + U.plural(n, ['раз', 'раза', 'раз']) + ' в неделю'; }
+    if (pw >= 0.75) return 'раз в неделю';
+    if (pw >= 0.4) return 'раз в две недели';
+    if (pw >= 0.2) return 'раз в месяц';
+    var w = Math.round(1 / pw);
+    return 'раз в ' + w + ' ' + U.plural(w, ['неделю', 'недели', 'недель']);
+  }
+  // Сколько копить: точно — в неделях («8 недель»), по-человечески — «почти 2 месяца», «1,5 года»
+  function weeksText(w) {
+    if (w < 1) { var d = Math.max(1, Math.round(w * 7)); return d + ' ' + U.plural(d, ['день', 'дня', 'дней']); }
+    var n = Math.round(w);
+    return n + ' ' + U.plural(n, ['неделя', 'недели', 'недель']);
+  }
+  function waitText(w) {
+    if (w < 7) return weeksText(w);
+    var big = w < 48, v = big ? w / 4.345 : w / 52.18;
+    var r = v < 3 ? Math.round(v * 2) / 2 : Math.round(v);
+    var forms = big ? ['месяц', 'месяца', 'месяцев'] : ['год', 'года', 'лет'];
+    var almost = r > v * 1.04, more = r < v * 0.96;
+    // «почти 2 месяца», но «больше 5 месяцев», «больше года»
+    var word = r % 1 || (more && r === 1) ? forms[1] : more ? forms[2] : U.plural(r, forms);
+    return (almost ? 'почти ' : more ? 'больше ' : '') + (r === 1 ? '' : U.dec(r, 1) + ' ') + word;
+  }
+  // Что увидит ребёнок после ответа: «= почти 2 месяца без мороженого» и как это посчитать
+  function saving(t, unit) {
+    if (!unit.perWeek) return null;
+    var n = roundCount(t.value / unit.value), w = n / unit.perWeek;
+    var long = waitText(w), exact = weeksText(w);
     return {
-      kind: 'animal', id: 'stack-' + key + '-' + count, name: 'Стопка ' + pay.of, acc: 'стопку ' + pay.of, fact: '', value: h,
-      dim: 'tall', dimText: 'в высоту', axis: 'h', vb: [0, 0, W, H], markup: '<path d="' + d + '" fill-rule="evenodd"/>',
-      w: W / 1000, h: h, ready: true, stretch: true
+      line: '= ' + long + (unit.without ? ' ' + unit.without : ' копить'),
+      text: countText(n, unit) + ' — это ' + exact + (long.replace(/^(почти|больше) /, '') !== exact ? ' (' + long + ')' : '') +
+        ' копить, если не покупать ' + accName(unit) + ' ' + often(unit.perWeek) + '.'
     };
   }
 
-  function buildTasks(raw, content) {
-    var out = [];
-    if (!raw || !Array.isArray(raw.prices)) return out;
-    raw.prices.forEach(function (p, i) {
-      var item = p && byId(content.pools.money, p.item);
-      var pay = p && PAY[p.pay];
-      var count = pay && isNum(p.price) ? Math.round(p.price / pay.rub) : 0;
-      if (!item || !pay || count < 1 || count > 100000) {
-        if (p && isOff(content, [p.item])) { content.off.push({ type: 'price', uid: 'p' + i, ids: [p.item] }); return; }
-        content.errors.push('Задача «цена в купюрах» №' + (i + 1) + ' с ошибкой: нужны вещь, цена и чем платим');
-        return;
-      }
-      var stack = stackItem(p.pay, count);
-      var t = pay.t * 1000;
-      out.push({
-        uid: 'p' + i, task: true, isTrue: null, target: stack, ref: item, pay: p.pay, source: 'Цена в купюрах', srcKey: 'money',
-        ask: 'какой высоты стопка?',
-        text: isStr(p.text) ? p.text : item.name + (/[иы]$/.test(item.name) ? ' стоят ' : ' стоит ') + U.fmt(p.price) + ' ₽. Какой высоты будет стопка ' + pay.of + '?',
-        why: U.fmt(p.price) + ' ₽ ÷ ' + U.fmt(pay.rub) + ' ₽ = ' + U.fmt(count) + ' ' + U.plural(count, pay.forms) + '. ' +
-          (pay.t > 0.0005 ? 'Одна монета толщиной ' + U.dec(t, 1) + ' мм' : 'Одна купюра — около 0,1 мм') +
-          ', значит стопка — ' + U.fmtLen(stack.value) + '.' + (isStr(p.why) ? ' ' + p.why : '')
-      });
-    });
-    return out;
-  }
-
-  // Раунд из задачи: белая стопка стартует заметно выше или ниже правды
-  function taskRound(tk) {
-    var claim = {};
-    Object.keys(tk).forEach(function (k) { claim[k] = tk[k]; });
-    claim.g0 = Math.random() < 0.5 ? U.rand(0.3, 0.6) : U.rand(1.8, 3.2);
-    return { target: tk.target, ref: tk.ref, claim: claim, kind: 'money' };
-  }
-
-  // Самый первый денежный раунд за сессию — пример из брифа: смартфон и сторублёвки
-  var firstMoney = true;
+  // Пара для цен: вещь дороже понятной единицы (мороженого, пиццы)
+  function unitOk(t, r) { return !!r.perWeek && t.value > r.value; }
 
   // Случайная пара, где цель больше или меньше эталона в разумное число раз
-  function randomPair(pool, range, usedTargets, target) {
+  function randomPair(pool, range, usedTargets, target, refOk) {
     var lo = range[0], hi = range[1];
     var targets = target ? [target] : U.shuffle(pool.filter(function (x) { return !usedTargets[x.id]; }));
     for (var i = 0; i < targets.length; i++) {
       var t = targets[i];
       var refs = pool.filter(function (r) {
-        if (r.id === t.id) return false;
+        if (r.id === t.id || (refOk && !refOk(t, r))) return false;
         var k = t.value > r.value ? t.value / r.value : r.value / t.value;
         return k >= lo && k <= hi;
       });
       if (refs.length) return { target: t, ref: U.pick(refs) };
     }
     return null;
+  }
+
+  // Пара с конкретной вещью: сначала в разумном диапазоне, иначе — с самой подходящей единицей;
+  // самая дешёвая единица сама становится эталоном («мяч — это 30 булочек»)
+  function pricePairFor(content, it) {
+    var pool = content.pools.prices;
+    var p = randomPair(pool, range(content, 'prices'), {}, it, unitOk);
+    if (p) return p;
+    function far(x) { return Math.abs(Math.log(x.target.value / x.ref.value / 15)); }
+    var best = null;
+    pool.forEach(function (x) {
+      if (x.id === it.id) return;
+      var q = unitOk(it, x) ? { target: it, ref: x } : unitOk(x, it) ? { target: x, ref: it } : null;
+      if (q && (!best || far(q) < far(best))) best = q;
+    });
+    return best;
   }
 
   function trapPair(content, kind, usedTargets, preferEvent) {
@@ -440,14 +508,27 @@
     return null;
   }
 
-  // Набор раундов. mode: animals | countries | money | chaos.
-  // Звери и карты — заявления «фейк или правда», деньги — только задачи «цена в купюрах».
-  // Во время события босс-раунды зверей и карт берутся из его пар.
+  // Какие темы можно играть: хватает объектов, а для цен — есть понятные единицы или заявления
+  function playable(content) {
+    var p = content.pools, c = content.claims || {};
+    return {
+      animals: p.animals.length >= 4,
+      countries: p.countries.length >= 4,
+      prices: p.prices.length >= 4 && (p.prices.some(function (x) { return x.perWeek; }) || (c.prices || []).length >= 3)
+    };
+  }
+
+  // Самый первый раунд режима «Цены» за сессию — пример из брифа: первое заявление про цены
+  // (самокат и мороженое). Менеджер меняет его, просто поставив другое заявление выше.
+  var firstPrice = true;
+
+  // Набор раундов. mode: animals | countries | prices | chaos. В каждом раунде — заявление «фейк или правда».
+  // Во время события босс-раунды берутся из его пар.
   // first — готовый раунд, который встанет первым (проверка из редактора, см. pickRound)
   function makeRun(content, mode, n, boss, first) {
     var kinds = [];
-    var cats = ['animals', 'countries'].filter(function (k) { return content.pools[k] && content.pools[k].length >= 4; });
-    if ((content.tasks || []).length >= 3) cats.push('money');
+    var can = playable(content);
+    var cats = KINDS.filter(function (k) { return can[k]; });
     if (!cats.length) return first ? [first] : [];
     if (mode === 'chaos') {
       // все темы вперемешку, поровну
@@ -459,32 +540,29 @@
     }
     var used = {}, usedClaims = {};
     var out = [];
-    var claims = content.claims || { animals: [], countries: [] };
+    var claims = content.claims || { animals: [], countries: [], prices: [] };
     if (first) {
       used[first.target.id] = true;
       if (first.claim.uid) usedClaims[first.claim.uid] = true;
-      firstMoney = false;
+      firstPrice = false;
     }
     var eventBoss = !!(content.event && content.event.traps);
     kinds.forEach(function (kind, idx) {
       var isBoss = (boss || []).indexOf(idx + 1) >= 0;
       var p = null;
-      if (kind === 'money') {
-        var all = content.tasks;
-        var fresh = all.filter(function (t) { return !usedClaims[t.uid]; });
-        var tk = firstMoney && mode === 'money' ? all[0] : U.pick(fresh.length ? fresh : all);
-        firstMoney = false;
-        usedClaims[tk.uid] = true;
-        p = taskRound(tk);
-        p.boss = isBoss;
-        out.push(p);
-        return;
+      var list = claims[kind] || [];
+      if (kind === 'prices' && mode === 'prices' && firstPrice) {
+        firstPrice = false;
+        if (list.length && !isBoss) {
+          p = { target: list[0].target, ref: list[0].ref, claim: list[0] };
+          usedClaims[list[0].uid] = true;
+        }
       }
       // во время события босс-раунд берёт пару из события
-      if (isBoss && eventBoss) p = trapPair(content, kind, used, true);
+      if (!p && isBoss && eventBoss) p = trapPair(content, kind, used, true);
       // готовые заявления из claims.json; на босс-раунде — только фейки
       if (!p) {
-        var pool = (claims[kind] || []).filter(function (c) {
+        var pool = list.filter(function (c) {
           return !usedClaims[c.uid] && !used[c.target.id] && (!isBoss || !c.isTrue);
         });
         if (pool.length && (isBoss || Math.random() < 0.8)) {
@@ -493,7 +571,7 @@
           p = { target: c.target, ref: c.ref, claim: c };
         }
       }
-      if (!p) p = randomPair(content.pools[kind], content.cfg.ratio[kind] || [1.2, 15], used);
+      if (!p) p = randomPair(content.pools[kind], range(content, kind), used, null, kind === 'prices' ? unitOk : null);
       if (!p) p = trapPair(content, kind, used, false);
       if (!p) return;
       if (!p.claim) p.claim = autoClaim(p, kind, isBoss);
@@ -506,30 +584,25 @@
     return out;
   }
 
-  // Раунд для проверки из редактора: заявление (c3), задача (p2) или объект по id.
-  // Объект попадёт в своё заявление или задачу, а если их нет — в пару с подходящим эталоном.
+  // Раунд для проверки из редактора: заявление (c3) или объект по id.
+  // Объект попадёт в своё заявление, а если его нет — в пару с подходящим эталоном.
   function pickRound(content, spec) {
-    var claims = content.claims || { animals: [], countries: [] };
-    var kinds = ['animals', 'countries'];
+    var claims = content.claims || { animals: [], countries: [], prices: [] };
     var found = null;
     function fromClaim(test) {
-      kinds.forEach(function (k) {
+      KINDS.forEach(function (k) {
         (claims[k] || []).forEach(function (c) { if (!found && test(c)) found = { target: c.target, ref: c.ref, claim: c, kind: k }; });
       });
     }
-    function fromTask(test) {
-      (content.tasks || []).forEach(function (t) { if (!found && test(t)) found = taskRound(t); });
-    }
     if (spec.claim) fromClaim(function (c) { return c.uid === spec.claim; });
-    else if (spec.task) fromTask(function (t) { return t.uid === spec.task; });
     else if (spec.item) {
       var id = spec.item;
-      fromTask(function (t) { return t.ref.id === id; });
       fromClaim(function (c) { return c.target.id === id || c.ref.id === id; });
-      kinds.forEach(function (k) {
+      KINDS.forEach(function (k) {
         var it = !found && byId(content.pools[k], id);
         if (!it) return;
-        var p = randomPair(content.pools[k], content.cfg.ratio[k] || [1.2, 15], {}, it) || randomPair(content.pools[k], [1, 1e9], {}, it);
+        var p = k === 'prices' ? pricePairFor(content, it)
+          : randomPair(content.pools[k], range(content, k), {}, it) || randomPair(content.pools[k], [1, 1e9], {}, it);
         if (!p) return;
         p.kind = k;
         p.claim = autoClaim(p, k, true);
@@ -540,24 +613,13 @@
     return found;
   }
 
-  // Реванш: та же цель, но другой эталон.
-  // Для «цены в купюрах» — та же вещь другими деньгами или те же деньги за другую вещь.
-  function rematch(content, round, rounds) {
-    if (round.claim.task) {
-      var inRun = {};
-      (rounds || []).forEach(function (x) { if (x.claim) inRun[x.claim.uid] = true; });
-      var near = (content.tasks || []).filter(function (t) {
-        return !inRun[t.uid] && (t.ref.id === round.ref.id || t.pay === round.claim.pay);
-      });
-      if (!near.length) return null;
-      var tp = taskRound(U.pick(near));
-      tp.rematch = true;
-      return tp;
-    }
+  // Реванш: та же цель, но другой эталон (в ценах — другая понятная единица)
+  function rematch(content, round) {
     var pool = content.pools[round.kind];
+    var ok = round.kind === 'prices' ? unitOk : null;
     var p = null;
     for (var i = 0; i < 6 && (!p || p.ref.id === round.ref.id); i++) {
-      p = randomPair(pool, content.cfg.ratio[round.kind] || [1.2, 15], {}, round.target);
+      p = randomPair(pool, range(content, round.kind), {}, round.target, ok);
     }
     if (!p || p.ref.id === round.ref.id) return null;
     p.kind = round.kind;
@@ -573,7 +635,8 @@
   }
 
   App.content = {
-    load: load, makeRun: makeRun, rematch: rematch, rich: rich, pick: pickRound, sayText: sayText,
-    DIM: DIM, SOURCES: SOURCES, DRAFT_KEY: DRAFT_KEY, PAY: PAY
+    load: load, makeRun: makeRun, rematch: rematch, rich: rich, pick: pickRound, sayText: sayText, playable: playable,
+    price: { forms: autoForms, count: countText, round: roundCount, saving: saving, often: often, costs: costs },
+    KINDS: KINDS, DIM: DIM, SOURCES: SOURCES, DRAFT_KEY: DRAFT_KEY
   };
 })();

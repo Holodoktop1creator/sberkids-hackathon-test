@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200">
+<defs><mask id="m"><path d="M120 40 L232 192 H8 Z" fill="#fff"/>
+<path d="M120 96 L154 192 H86 Z" fill="#000"/>
+<path d="M120 40 L76 192" stroke="#000" stroke-width="5"/>
+<path d="M120 44 V6" stroke="#fff" stroke-width="7" stroke-linecap="round"/><path d="M123 6 L158 18 L123 30 Z" fill="#fff"/></mask></defs>
+<rect width="240" height="200" fill="#000" mask="url(#m)"/>
+</svg>
