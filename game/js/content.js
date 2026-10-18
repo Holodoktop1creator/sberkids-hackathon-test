@@ -24,6 +24,8 @@
     unlocks: [],
     lessons: {},
     modes: { chaos: true, animals: true, countries: true, money: true, duel: true },
+    // «Сколько раз помещается»: ряд значков меньшего предмета в разборе раунда
+    units: { show: true, max: 20 },
     theme: { animals: '#ffe9c4', countries: '#dcefff', money: '#dbf6e8' },
     texts: {
       tagline: 'Фейк или правда? Растяни силуэт\nдо **настоящего** размера.',
@@ -107,7 +109,7 @@
     });
     if (!(cfg.rounds >= 3 && cfg.rounds <= 12)) cfg.rounds = DEFAULTS.rounds;
     if (!(cfg.duelRounds >= 3 && cfg.duelRounds <= 10)) cfg.duelRounds = DEFAULTS.duelRounds;
-    ['modes', 'theme', 'texts'].forEach(function (k) {
+    ['modes', 'theme', 'texts', 'units'].forEach(function (k) {
       var merged = {};
       Object.keys(DEFAULTS[k]).forEach(function (f) {
         var v = cfg[k][f];
@@ -116,6 +118,7 @@
       });
       cfg[k] = merged;
     });
+    if (!(cfg.units.max >= 5 && cfg.units.max <= 40)) cfg.units.max = DEFAULTS.units.max;
     cfg.events = Array.isArray(cfg.events) ? cfg.events.filter(function (e) {
       return e && isDate(e.from) && isDate(e.to) && isStr(e.title);
     }) : [];

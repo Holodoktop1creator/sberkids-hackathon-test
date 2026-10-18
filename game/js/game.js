@@ -294,19 +294,61 @@
   }
 
   function ratio(x) { return (x < 1 ? U.dec(x, 2) : U.fmtRatio(x)) + ' ×'; }
+  // всегда «большее = N × меньшее» по настоящим размерам
+  function equation(r) {
+    var t = r.target, ref = r.ref, k = t.value / ref.value;
+    return k < 1 ? ref.name + ' = ' + U.fmtRatio(1 / k) + ' × ' + t.name : t.name + ' = ' + U.fmtRatio(k) + ' × ' + ref.name;
+  }
   function ratioLines(r, g) {
     var t = r.target, ref = r.ref;
     if (r.claim.task) {
       // в задаче про деньги считаем в сантиметрах, а не «во сколько раз»
-      return { truth: t.name + ' — ' + U.fmtLen(t.value), guess: U.fmtLen(B.value(t, g)), said: '' };
+      return { truth: t.name + ' — ' + U.fmtLen(t.value), guess: U.fmtLen(B.value(t, g)), said: '', eq: '' };
     }
     var k = t.value / ref.value;
     var gv = B.value(t, g) / ref.value;
-    // всегда «большее = N × меньшее» по настоящим размерам
     var flip = k < 1;
     function side(x) { return flip ? 1 / x : x; }
-    var eq = flip ? ref.name + ' = ' + U.fmtRatio(1 / k) + ' × ' + t.name : t.name + ' = ' + U.fmtRatio(k) + ' × ' + ref.name;
-    return { truth: eq, guess: ratio(side(gv)), said: ratio(side(r.claim.says)) };
+    return { truth: equation(r), guess: ratio(side(gv)), said: ratio(side(r.claim.says)), eq: '' };
+  }
+
+  // Значки в ряд: целые и обрезанный последний; больше max — один значок = 10, 100…
+  function unitRow(n, max, one, w) {
+    var per = n > max ? Math.pow(10, Math.ceil(Math.log(n / max) / Math.LN10)) : 1;
+    var m = n / per, whole = Math.floor(m + 1e-9), frac = m - whole;
+    var icons = '';
+    for (var i = 0; i < whole; i++) icons += '<i class="u" style="animation-delay:' + (0.25 + i * 0.045).toFixed(2) + 's">' + one + '</i>';
+    // дробная часть — обрезанный значок
+    if (frac >= 0.08) icons += '<i class="u" style="width:' + Math.max(4, Math.round(w * frac)) + 'px;animation-delay:' + (0.25 + whole * 0.045).toFixed(2) + 's">' + one + '</i>';
+    return { icons: icons, per: per };
+  }
+
+  // «Сколько раз помещается»: меньший предмет значками в ряд — умножение видно глазами.
+  // Работает для любой пары: по длине, росту и площади. В деньгах значки — купюры или монеты.
+  function unitsHtml(r) {
+    var cfg = S.content.cfg.units;
+    if (!cfg.show) return '';
+    if (r.claim.task) {
+      var pay = App.content.PAY[r.claim.pay];
+      var count = Math.round(r.target.value / pay.t);
+      var coin = pay.t > 0.0005;
+      var row = unitRow(count, cfg.max, '<svg class="ic u-ic u-money"><use href="#i-' + (coin ? 'coin' : 'cash') + '"/></svg>', 28);
+      var word = function (x) { return U.plural(x, pay.forms); };
+      return '<div class="u-eq">Это ' + U.fmt(count) + ' ' + word(count) + ' по ' + U.fmt(pay.rub) + ' ₽</div>' +
+        '<div class="units"><div class="u-row">' + row.icons + '</div><b class="u-n">' + U.fmt(count) + '</b></div>' +
+        (row.per > 1 ? '<div class="u-note">Один значок = ' + U.fmt(row.per) + ' ' + word(row.per) + '</div>' : '');
+    }
+    var k = r.target.value / r.ref.value;
+    var small = k >= 1 ? r.ref : r.target;
+    var n = k >= 1 ? k : 1 / k;
+    var h = 28, w = Math.round(U.clamp(h * small.vb[2] / small.vb[3], 16, 56));
+    var inner = small.layers ? App.assets.layer(small, 'ref') : '<g fill="currentColor">' + small.markup + '</g>';
+    // силуэт один раз в symbol, дальше — ссылки: у стран контуры по несколько КБ
+    var html = '<svg class="u-defs" aria-hidden="true"><symbol id="u-sym" viewBox="' + small.vb.join(' ') + '" preserveAspectRatio="xMidYMid meet">' + inner + '</symbol></svg>';
+    var row = unitRow(n, cfg.max, '<svg class="u-ic" style="width:' + w + 'px;height:' + h + 'px"><use href="#u-sym"/></svg>', w);
+    return html + '<div class="units"><div class="u-row">' + row.icons + '</div>' +
+      '<b class="u-n">' + U.fmtRatio(n) + ' ×</b></div>' +
+      (row.per > 1 ? '<div class="u-note">Один значок = ' + U.fmt(row.per) + ' × ' + esc(small.name) + '</div>' : '');
   }
 
   // Вердикт детектора: фейк раскрыт, если ребёнок подогнал силуэт близко к правде
@@ -349,6 +391,7 @@
       rank: rankText(pts) + (r.boss ? ' · очки ×2' : ''),
       info: verdictInfo(r, pts),
       truth: lines.truth,
+      eq: lines.eq,
       cells: cells,
       round: r
     });
@@ -373,6 +416,7 @@
       rank: '',
       info: info,
       truth: t.name + ' — ' + B.fmtVal(t, t.value),
+      eq: r.claim.task ? '' : equation(r),
       cells: [
         { cls: 'mine', k: 'Игрок 1', v: B.fmtVal(t, B.value(t, g1)) },
         { cls: 'p2', k: 'Игрок 2', v: B.fmtVal(t, B.value(t, g2)) }
@@ -416,7 +460,8 @@
     sc.className = 'res-score s' + o.band + (S.duel ? ' duel' : '');
     sc.textContent = '';
     $('res-rank').textContent = o.rank;
-    $('res-rows').innerHTML = '<div class="res-truth"><span>На самом деле</span><b>' + esc(o.truth) + '</b></div>' +
+    $('res-rows').innerHTML = '<div class="res-truth"><span>На самом деле</span><b>' + esc(o.truth) + '</b>' +
+      (o.eq ? '<div class="u-eq">' + esc(o.eq) + '</div>' : '') + unitsHtml(o.round) + '</div>' +
       '<div class="res-pair">' + o.cells.map(function (c) {
         return '<div class="res-cell ' + c.cls + '"><span>' + esc(c.k) + '</span><b>' + esc(c.v) + '</b></div>';
       }).join('') + '</div>';
