@@ -6,7 +6,8 @@
 <title>Прикинь! — редактор контента</title>
 <!-- Редактор для контент-менеджера (в игру не попадает).
      Правки сохраняются черновиком в этом браузере; «Открыть игру с изменениями» запускает игру
-     на черновике; «Скачать файлы» отдаёт готовые JSON и картинки для выкладки на CDN. -->
+     на черновике; «Опубликовать» кладёт правки туда, откуда их берёт игра (репозиторий GitHub →
+     GitHub Pages), одним коммитом; «Скачать файлы» отдаёт их для выкладки на любой другой CDN. -->
 <style>
   :root { --ink: #1b1340; --bg: #f4f2fb; --line: #ddd8f0; --ok: #1f9d55; --bad: #d6336c; --hot: #ff2d95; --lime: #c6ff3d; }
   * { box-sizing: border-box; }
@@ -59,6 +60,25 @@
   .form input, .form select { font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 120px; }
   .preview { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .preview svg { width: 100%; height: 220px; background: #ffe9c4; border-radius: 12px; border: 2px solid var(--ink); }
+  /* связи объекта с заявлениями и задачами */
+  .uses { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: #6b6290; }
+  .uses.warn { color: #b8560b; font-weight: 700; }
+  .card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .card.off { background: #f7f6fb; border-style: dashed; }
+  .verdict.off { color: #8a83ad; }
+  .notice { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #effbe0; border: 1px solid #c9ec9b; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .check { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 0 0 10px; }
+  /* публикация */
+  .modal { position: fixed; inset: 0; z-index: 20; background: rgba(27, 19, 64, .55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal[hidden] { display: none; }
+  .modal-box { background: #fff; border-radius: 16px; padding: 18px 20px; width: min(720px, 100%); max-height: 92vh; overflow: auto; }
+  .modal-box .form input { min-width: 200px; }
+  .diff { margin: 6px 0 10px; padding-left: 20px; }
+  .log { margin: 10px 0 0; padding-left: 20px; }
+  .log li { margin: 3px 0; }
+  .log li.ok { color: var(--ok); font-weight: 700; }
+  .log li.err { color: var(--bad); font-weight: 700; }
+  code { background: #f0eefa; padding: 1px 5px; border-radius: 5px; }
   @media (max-width: 700px) { .preview { grid-template-columns: 1fr; } header { position: static; } }
 </style>
 </head>
@@ -66,8 +86,9 @@
 <header>
   <h1>Прикинь! · редактор контента</h1>
   <label>Дата для событий <input type="date" id="date"></label>
-  <button class="btn go" id="btn-play">▶ Открыть игру с изменениями</button>
-  <button class="btn" id="btn-export">⬇ Скачать файлы для выкладки</button>
+  <button class="btn" id="btn-play">▶ Открыть игру с изменениями</button>
+  <button class="btn go" id="btn-publish">🚀 Опубликовать в игру</button>
+  <button class="btn" id="btn-export">⬇ Скачать файлы</button>
   <button class="btn warn" id="btn-reset">↺ Отменить все изменения</button>
   <div class="status" id="status"></div>
 </header>
@@ -87,12 +108,13 @@
       <button data-tab="texts">✍️ Тексты и события</button>
       <button data-tab="new">➕ Новая картинка</button>
     </div>
+    <div class="notice" id="notice" hidden></div>
     <div id="panel"></div>
   </section>
 
   <section id="new-box" hidden>
     <h2>Новый объект по картинке</h2>
-    <p class="muted">Перетащите PNG или SVG с прозрачным фоном. Игра сама обрежет поля, посчитает пропорции и перекрасит силуэт. Заполните поля и нажмите «Добавить в игру» — объект появится в своей вкладке и в черновике игры.</p>
+    <p class="muted">Перетащите PNG или SVG с прозрачным фоном. Игра сама обрежет поля, посчитает пропорции и перекрасит силуэт. Заполните поля и нажмите «Добавить в игру» — объект появится в своей вкладке, в черновике игры и, после «Опубликовать», у детей.</p>
     <div class="drop" id="drop">📂 Перетащите файл сюда или нажмите, чтобы выбрать<input type="file" id="file" accept="image/png,image/svg+xml,image/webp" hidden></div>
     <div class="form">
       <label>Тема <select id="f-kind"><option value="animals">Зверь</option><option value="countries">Страна</option><option value="money">Вещь для режима «Деньги»</option></select></label>
@@ -101,8 +123,12 @@
       <label id="l-size">Размер, м <input id="f-size" type="number" step="any" value="2"></label>
       <label id="l-dim">Измерение <select id="f-dim"><option value="long">в длину</option><option value="tail">в длину с хвостом</option><option value="tall">в высоту</option><option value="diam">в диаметре</option></select></label>
       <label id="l-ref">Эталон рядом <select id="f-ref"></select></label>
+      <label id="l-price" hidden>Цена, ₽ <input id="f-price" type="number" step="any" value="1000"></label>
+      <label id="l-pay" hidden>Чем платим <select id="f-pay"></select></label>
       <label style="flex:1;min-width:220px">Факт <input id="f-fact" placeholder="Родственник жирафа, а похож на зебру"></label>
     </div>
+    <label class="check" id="l-claim"><input type="checkbox" id="f-claim" checked> Сразу добавить заявление-фейк с этим эталоном («в 2 раза больше правды») — так объект точно попадёт в игру. Текст можно поправить во вкладке «Заявления».</label>
+    <p class="muted" id="l-moneynote" hidden>Для вещи сразу создастся задача «цена в купюрах» с этой ценой: режим «Деньги» состоит из задач, и без задачи вещь в игре не появится.</p>
     <div class="preview" id="preview" hidden>
       <div><svg id="pv-styles"></svg><small class="muted">Стили: эталон · догадка · правильный ответ</small></div>
       <div><svg id="pv-scale"></svg><small class="muted" id="pv-note"></small></div>
@@ -111,6 +137,26 @@
     <button class="btn go" id="btn-add" hidden>➕ Добавить в игру</button>
   </section>
 </main>
+
+<div class="modal" id="pub" hidden>
+  <div class="modal-box">
+    <h2>🚀 Опубликовать в игру</h2>
+    <p class="muted">Игра берёт контент из папки <code id="pub-where"></code>, которую раздаёт GitHub Pages. Публикация положит туда ваши правки одним коммитом — дети увидят их при следующем запуске игры, обычно через минуту. Свой сервер не нужен, релиз приложения — тоже.</p>
+    <div id="pub-diff"></div>
+    <div class="form">
+      <label>Репозиторий <input id="pub-repo" placeholder="owner/repo"></label>
+      <label>Ветка <input id="pub-branch" placeholder="main"></label>
+      <label>Папка контента <input id="pub-dir" placeholder="game/content"></label>
+    </div>
+    <div class="form">
+      <label style="flex:1;min-width:280px">Токен GitHub <input id="pub-token" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="pub-remember"> Запомнить токен на этом устройстве (иначе — только до закрытия вкладки)</label>
+    <p class="muted">Нужен fine-grained токен с доступом только к этому репозиторию и правом <b>Contents: Read and write</b> — <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">создать на GitHub</a>. Токен хранится только в этом браузере и отправляется только в API GitHub.</p>
+    <div class="toolbar"><button class="btn go" id="pub-go">Опубликовать</button><button class="btn" id="pub-close">Закрыть</button></div>
+    <ol class="log" id="pub-log"></ol>
+  </div>
+</div>
 
 <script src="../game/js/util.js"></script>
 <script src="../game/js/assets.js"></script>
@@ -121,6 +167,7 @@
   var U = App.util;
   var BASE = '../game/content/';
   var KEY = App.content.DRAFT_KEY;
+  var FILES = ['game', 'items', 'claims'];
   var CATS = { animals: 'Звери', countries: 'Страны', money: 'Вещи' };
   var DIMS = { long: 'в длину', tail: 'в длину с хвостом', tall: 'в высоту', diam: 'в диаметре' };
   var ORIG = null, D = null, BASEDATA = { animals: [], countries: [] }, C = null;
@@ -134,6 +181,8 @@
   }
   function val(it) { return it.kind === 'country' ? U.fmtArea(it.value) : U.fmtLen(it.value) + ' ' + it.dimText; }
   function num(v) { if (v === '' || v == null) return undefined; var n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : v; }
+  function count(n, forms) { return n + ' ' + U.plural(n, forms); }
+  var CLAIMS = ['заявление', 'заявления', 'заявлений'], TASKS = ['задача', 'задачи', 'задач'], TRAPS = ['пара-ловушка', 'пары-ловушки', 'пар-ловушек'];
 
   // ---------- черновик ----------
   function normalize(d) {
@@ -151,7 +200,23 @@
     return d;
   }
   function data() { return { game: D.game, items: D.items, claims: D.claims }; }
-  function dirty() { return JSON.stringify(data()) !== JSON.stringify(ORIG); }
+  // Черновик в том виде, в каком он ляжет в игру: новые картинки — файлами img/… вместо data URL
+  function pubJson() {
+    var items = clone(D.items), images = [];
+    ['animals', 'countries', 'money'].forEach(function (cat) {
+      items[cat].forEach(function (r) {
+        if (/^data:/.test(r.image || '')) {
+          var f = r._file || ('img/' + r.id + '.png');
+          images.push({ name: f, url: r.image });
+          r.image = f;
+        }
+        delete r._file;
+      });
+    });
+    return { game: D.game, items: items, claims: D.claims, images: images };
+  }
+  function changedFiles(p) { return FILES.filter(function (k) { return JSON.stringify(p[k]) !== JSON.stringify(ORIG[k]); }); }
+  function dirty() { return changedFiles(pubJson()).length > 0; }
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(data())); } catch (e) { alert('Не получилось сохранить черновик в браузере: ' + e.message); }
     status();
@@ -160,8 +225,8 @@
     var d = dirty();
     $('status').className = 'status' + (d ? ' dirty' : '');
     $('status').textContent = d
-      ? '✏️ Есть изменения — они сохранены в этом браузере. Чтобы дети их увидели, скачайте файлы и выложите в папку content на CDN.'
-      : '✓ Изменений нет — всё как в выложенных файлах.';
+      ? '✏️ Есть неопубликованные правки — они в черновике этого браузера. «▶ Открыть игру с изменениями» — посмотреть, «🚀 Опубликовать» — отправить детям.'
+      : '✓ Всё опубликовано — у детей та же игра, что вы видите здесь.';
   }
 
   // ---------- проверка через сам движок игры ----------
@@ -169,6 +234,7 @@
     var y = window.scrollY;
     return App.content.load(BASE, $('date').value, data()).then(function (c) {
       C = c;
+      $('f-ref').removeAttribute('data-cat'); // список эталонов соберётся заново с новыми объектами
       renderSummary();
       renderTab();
       window.scrollTo(0, y);
@@ -183,6 +249,93 @@
     for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
     return null;
   }
+  function rawById(id) {
+    var lists = [D.items.animals, D.items.countries, D.items.money, BASEDATA.animals, BASEDATA.countries];
+    if (ORIG) lists.push(ORIG.items.animals, ORIG.items.countries, ORIG.items.money);
+    for (var i = 0; i < lists.length; i++) {
+      for (var j = 0; j < (lists[i] || []).length; j++) if (lists[i][j].id === id) return lists[i][j];
+    }
+    return null;
+  }
+  function nameOf(id) {
+    var it = findItem(id);
+    if (it) return it.name;
+    var e = D.items.edits[id], r = rawById(id);
+    return (e && e.name) || (r && r.name) || id;
+  }
+  function allIds() {
+    var ids = [];
+    [D.items.animals, D.items.countries, D.items.money, BASEDATA.animals, BASEDATA.countries].forEach(function (l) {
+      (l || []).forEach(function (r) { ids.push(r.id); });
+    });
+    return ids;
+  }
+  function offOf(uid) {
+    var off = (C && C.off) || [];
+    for (var i = 0; i < off.length; i++) if (off[i].uid === uid) return off[i];
+    return null;
+  }
+
+  // ---------- связи: где используется объект ----------
+  function trapLists() {
+    var out = [];
+    function add(t) { if (t && typeof t === 'object') ['animals', 'countries'].forEach(function (k) { if (Array.isArray(t[k])) out.push(t[k]); }); }
+    add(D.game.traps);
+    D.game.events.forEach(function (e) { add(e && e.traps); });
+    return out;
+  }
+  function uses(id) {
+    var u = { claims: [], prices: [], traps: 0 };
+    D.claims.claims.forEach(function (c, i) { if (c && (c.target === id || c.ref === id)) u.claims.push(i); });
+    D.claims.prices.forEach(function (p, i) { if (p && p.item === id) u.prices.push(i); });
+    trapLists().forEach(function (list) { list.forEach(function (p) { if (p[0] === id || p[1] === id) u.traps++; }); });
+    return u;
+  }
+  function usesText(u) {
+    var parts = [];
+    if (u.claims.length) parts.push(count(u.claims.length, CLAIMS));
+    if (u.prices.length) parts.push(count(u.prices.length, TASKS));
+    if (u.traps) parts.push(count(u.traps, TRAPS));
+    return parts.join(', ');
+  }
+  function removeAt(arr, idxs) { idxs.slice().sort(function (a, b) { return b - a; }).forEach(function (i) { arr.splice(i, 1); }); }
+  function dropTraps(id) {
+    trapLists().forEach(function (list) {
+      for (var i = list.length - 1; i >= 0; i--) if (list[i][0] === id || list[i][1] === id) list.splice(i, 1);
+    });
+  }
+  // Эталон для заявления о новом объекте: человек для зверей, иначе — кто отличается примерно в 3 раза
+  function partner(it, cat) {
+    var pool = C.pools[cat].filter(function (r) { return r.id !== it.id; });
+    var range = (C.cfg.ratio && C.cfg.ratio[cat]) || [1.2, 15];
+    function k(r) { return Math.max(it.value / r.value, r.value / it.value); }
+    var human = cat === 'animals' && findItem('human');
+    if (human && human.id !== it.id && k(human) >= range[0] && k(human) <= range[1]) return human;
+    var best = null, bestD = Infinity;
+    pool.forEach(function (r) {
+      var d = Math.abs(Math.log(k(r) / 3));
+      if (k(r) >= range[0] && k(r) <= range[1] && d < bestD) { best = r; bestD = d; }
+    });
+    return best || pool[0] || null;
+  }
+  // Заявление-фейк «в 2 раза больше правды» — текст тот же, каким игра пишет заявления сама
+  function starterClaim(it, ref) {
+    var s = App.content.sayText(it, ref, 2 * it.value / ref.value);
+    return { target: it.id, ref: ref.id, says: s.says, source: it.kind === 'country' ? 'map' : 'rumor', text: s.text, why: '' };
+  }
+
+  // ---------- проверка в игре ----------
+  function openGame(q) { save(); window.open('../game/?draft=1' + (q ? '&' + q : ''), '_blank'); }
+  function tryBtn(q) { return '<button class="btn small" data-try="' + esc(q) + '">▶ Проверить в игре</button>'; }
+  function notice(html) {
+    var n = $('notice');
+    n.hidden = !html;
+    n.innerHTML = html ? html + ' <button class="btn small" data-act="nclose">×</button>' : '';
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-try]');
+    if (b) openGame(b.getAttribute('data-try'));
+  });
 
   // ---------- силуэты как в игре ----------
   function shape(it, which, x, y, w) {
@@ -209,9 +362,16 @@
     var cfg = C.cfg, ev = C.event;
     var all = C.claims.animals.concat(C.claims.countries);
     var truths = all.filter(function (c) { return c.isTrue; }).length;
+    var off = { claim: 0, price: 0, trap: 0 };
+    (C.off || []).forEach(function (o) { off[o.type]++; });
+    var offParts = [];
+    if (off.claim) offParts.push(count(off.claim, CLAIMS));
+    if (off.price) offParts.push(count(off.price, TASKS));
+    if (off.trap) offParts.push(count(off.trap, TRAPS));
     $('summary').innerHTML = (C.errors.length
       ? '<ul class="errors">' + C.errors.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>'
       : '<p class="ok">✅ Ошибок нет — всё загрузится в игре</p>') +
+      (offParts.length ? '<p class="muted">⏸ Отключено вместе с убранными объектами: ' + offParts.join(', ') + '. Вернёте объект — вернутся и они.</p>' : '') +
       '<div class="facts"><span>🐾 Зверей: <b>' + C.pools.animals.length + '</b></span><span>🌍 Стран: <b>' + C.pools.countries.length + '</b></span>' +
       '<span>🛍️ Вещей: <b>' + C.pools.money.length + '</b></span><span>🕵️ Заявлений: <b>' + all.length + '</b> (правды ' + truths + ')</span>' +
       '<span>💰 Цен в купюрах: <b>' + (C.tasks || []).length + '</b></span>' +
@@ -235,24 +395,37 @@
     for (var k = 0; k < all.length; k++) if (all[k].uid === 'c' + i) return all[k];
     return null;
   }
-  function options(selected) {
+  function options(selected, cats) {
     // заявления «фейк или правда» — только про зверей и карты; деньги — задачи «цена в купюрах»
-    return ['animals', 'countries'].map(function (cat) {
+    var html = (cats || ['animals', 'countries']).map(function (cat) {
       return '<optgroup label="' + CATS[cat] + '">' + C.pools[cat].map(function (it) {
         return '<option value="' + esc(it.id) + '"' + (it.id === selected ? ' selected' : '') + '>' + esc(it.name) + '</option>';
       }).join('') + '</optgroup>';
     }).join('');
+    // объект убран из игры — показываем его, чтобы запись молча не «переехала» на другой
+    if (selected && !findItem(selected)) html = '<option value="' + esc(selected) + '" selected>' + esc(nameOf(selected)) + ' — убран из игры</option>' + html;
+    return html;
+  }
+  function payOptions(sel) {
+    var PAY = App.content.PAY;
+    return Object.keys(PAY).map(function (k) {
+      return '<option value="' + k + '"' + (k === sel ? ' selected' : '') + '>' + PAY[k].rub + ' ₽ — ' + esc(PAY[k].of) + '</option>';
+    }).join('');
+  }
+  function offNote(off, what) {
+    return '<div class="verdict off">⏸ Отключено: «' + esc(off.ids.map(nameOf).join('», «')) + '» убран из игры. Вернёте объект — вернётся и ' + what + '.</div>';
   }
   function renderClaims() {
     var srcs = D.claims.sources;
     var html = '<div class="toolbar"><button class="btn go" data-act="cadd">➕ Новое заявление</button>' +
       '<span class="muted">«Во сколько раз больше» — как утверждает заявление (для стран — по площади; меньше 1 — значит меньше). Правда это или фейк, игра посчитает сама.</span></div><div class="grid">';
     html += D.claims.claims.map(function (c, i) {
-      var cl = claimOf(i);
-      var v = !cl ? '<div class="verdict err">⚠️ Ошибка: оба объекта должны существовать и быть из одной темы, число — больше нуля</div>'
+      var cl = claimOf(i), off = offOf('c' + i);
+      var v = off ? offNote(off, 'заявление')
+        : !cl ? '<div class="verdict err">⚠️ Ошибка: оба объекта должны существовать и быть из одной темы, число — больше нуля</div>'
         : cl.isTrue ? '<div class="verdict true">✅ ПРАВДА</div>'
         : '<div class="verdict fake">🕵️ ФЕЙК — ' + (cl.g0 >= 1 ? 'преувеличивает' : 'преуменьшает') + ' в ' + U.fmtRatio(cl.target.kind === 'country' ? Math.pow(Math.max(cl.g0, 1 / cl.g0), 2) : Math.max(cl.g0, 1 / cl.g0)) + ' раза</div>';
-      return '<div class="card' + (cl ? '' : ' bad') + '" data-i="' + i + '">' + v +
+      return '<div class="card' + (cl ? '' : off ? ' off' : ' bad') + '" data-i="' + i + '">' + v +
         '<label>Заявление<textarea data-c="text">' + esc(c.text) + '</textarea></label>' +
         '<div class="row"><label>Кого проверяем<select data-c="target">' + options(c.target) + '</select></label>' +
         '<label>Эталон<select data-c="ref">' + options(c.ref) + '</select></label></div>' +
@@ -261,33 +434,31 @@
           return '<option value="' + k + '"' + (k === c.source ? ' selected' : '') + '>' + esc(srcs[k]) + '</option>';
         }).join('') + '</select></label></div>' +
         '<label>Почему фейк / правда<textarea data-c="why">' + esc(c.why) + '</textarea></label>' +
-        '<button class="btn small warn" data-act="cdel">🗑 Удалить заявление</button></div>';
+        '<div class="card-actions">' + (cl ? tryBtn('claim=c' + i) : '') +
+        '<button class="btn small warn" data-act="cdel">🗑 Удалить заявление</button></div></div>';
     }).join('');
     $('panel').innerHTML = html + '</div>';
   }
 
   // «Цена в купюрах»: вещь, цена, чем платим — стопку игра строит сама
   function renderPrices() {
-    var PAY = App.content.PAY;
     var html = '<div class="toolbar"><button class="btn go" data-act="padd">➕ Новая задача</button>' +
-      '<span class="muted">Режим «💰 Деньги» целиком состоит из этих задач. Вещь из вкладки «Деньги: вещи», цена в рублях и чем платим. Первая задача в списке — первый раунд режима. Игра посчитает, сколько купюр или монет нужно, и построит стопку. Текст задания можно не писать — он соберётся сам.</span></div><div class="grid">';
+      '<span class="muted">Режим «Деньги» целиком состоит из этих задач. Вещь из вкладки «Деньги: вещи», цена в рублях и чем платим. Первая задача в списке — первый раунд режима. Игра посчитает, сколько купюр или монет нужно, и построит стопку. Текст задания можно не писать — он соберётся сам.</span></div><div class="grid">';
     html += D.claims.prices.map(function (p, i) {
-      var t = null;
+      var t = null, off = offOf('p' + i);
       (C.tasks || []).forEach(function (x) { if (x.uid === 'p' + i) t = x; });
       var head = t ? '<div class="verdict true">→ ' + esc(t.why.split('. ')[0]) + ' · стопка ' + U.fmtLen(t.target.value) + '</div>' +
           '<svg viewBox="0 0 200 110">' + scene([t.ref, t.target], 200, 110) + '</svg>'
+        : off ? offNote(off, 'задача')
         : '<div class="verdict err">⚠️ Ошибка: выберите вещь, цену больше нуля и чем платим</div>';
-      return '<div class="card' + (t ? '' : ' bad') + '" data-p="' + i + '">' + head +
-        '<div class="row"><label>Вещь<select data-pf="item">' + C.pools.money.map(function (it) {
-          return '<option value="' + esc(it.id) + '"' + (it.id === p.item ? ' selected' : '') + '>' + esc(it.name) + '</option>';
-        }).join('') + '</select></label>' +
+      return '<div class="card' + (t ? '' : off ? ' off' : ' bad') + '" data-p="' + i + '">' + head +
+        '<div class="row"><label>Вещь<select data-pf="item">' + options(p.item, ['money']) + '</select></label>' +
         '<label>Цена, ₽<input data-pf="price" type="number" step="any" value="' + esc(p.price) + '"></label></div>' +
-        '<label>Чем платим<select data-pf="pay">' + Object.keys(PAY).map(function (k) {
-          return '<option value="' + k + '"' + (k === p.pay ? ' selected' : '') + '>' + PAY[k].rub + ' ₽ — ' + esc(PAY[k].of) + '</option>';
-        }).join('') + '</select></label>' +
+        '<label>Чем платим<select data-pf="pay">' + payOptions(p.pay) + '</select></label>' +
         '<label>Текст задания (необязательно)<textarea data-pf="text" placeholder="' + esc(t ? t.text : '') + '">' + esc(p.text || '') + '</textarea></label>' +
         '<label>Вывод после ответа (необязательно)<textarea data-pf="why">' + esc(p.why || '') + '</textarea></label>' +
-        '<button class="btn small warn" data-act="pdel">🗑 Удалить задачу</button></div>';
+        '<div class="card-actions">' + (t ? tryBtn('task=p' + i) : '') +
+        '<button class="btn small warn" data-act="pdel">🗑 Удалить задачу</button></div></div>';
     }).join('');
     $('panel').innerHTML = html + '</div>';
   }
@@ -308,19 +479,29 @@
     }
     return o.raw[f];
   }
+  // Строка «где используется»: так видно, что уйдёт и что вернётся вместе с объектом
+  function usesLine(id, cat) {
+    var ut = usesText(uses(id));
+    if (cat === 'money') {
+      return uses(id).prices.length ? '<div class="uses">В игре: ' + ut + ' <button class="btn small" data-act="oprice">➕ Ещё задача</button></div>'
+        : '<div class="uses warn">⚠️ Нет ни одной задачи — в режиме «Деньги» вещь не появится. <button class="btn small go" data-act="oprice">➕ Задача с этой вещью</button></div>';
+    }
+    return '<div class="uses">' + (ut ? 'В игре: ' + ut : 'Своих заявлений нет — игра берёт объект в случайные пары') +
+      ' <button class="btn small" data-act="oclaim">➕ Заявление</button></div>';
+  }
   function renderObjects(cat) {
     var hidden = D.items.hidden;
     var human = findItem('human');
     var list = objects(cat);
     var html = '<div class="toolbar"><button class="btn go" data-act="gonew">➕ Добавить по картинке</button>' +
-      '<span class="muted">Правки встроенных объектов сохраняются как поправки в items.json — большие файлы с силуэтами не меняются.</span></div><div class="grid">';
+      '<span class="muted">Правки встроенных объектов сохраняются как поправки в items.json — большие файлы с силуэтами не меняются. Убранный объект забирает с собой свои заявления и задачи, а вернётся — вернёт и их.</span></div><div class="grid">';
     html += list.filter(function (o) { return hidden.indexOf(o.id) < 0; }).map(function (o) {
       var it = findItem(o.id);
       var pic = it ? '<svg viewBox="0 0 200 110">' + scene(cat === 'animals' && human && it !== human ? [human, it] : [it], 200, 110) + '</svg>'
         : '<div class="verdict err">⚠️ Не загрузилось — проверьте размер и картинку</div>';
       var isCountry = cat === 'countries';
       var src = o.origin === 'base' ? '✏️ встроенный (' + (isCountry ? 'countries.json' : 'animals.json') + ')'
-        : '🖼 ' + (/^data:/.test(o.raw.image || '') ? 'новая картинка — скачается при выкладке' : esc(o.raw.image || ''));
+        : '🖼 ' + (/^data:/.test(o.raw.image || '') ? 'новая картинка — уйдёт в игру при публикации' : esc(o.raw.image || ''));
       return '<div class="card' + (it ? '' : ' bad') + '" data-cat="' + cat + '" data-id="' + esc(o.id) + '" data-origin="' + o.origin + '" data-idx="' + (o.idx == null ? '' : o.idx) + '">' +
         pic + '<div class="src">id: ' + esc(o.id) + ' · ' + src + '</div>' +
         '<label>Название<input data-f="name" value="' + esc(field(o, 'name')) + '"></label>' +
@@ -331,13 +512,17 @@
               return '<option value="' + k + '"' + (k === field(o, 'dim') ? ' selected' : '') + '>' + DIMS[k] + '</option>';
             }).join('') + '</select></label>') + '</div>' +
         '<label>Факт «ЧЕГО?!»<textarea data-f="fact">' + esc(field(o, 'fact')) + '</textarea></label>' +
-        '<button class="btn small warn" data-act="odel">🗑 ' + (o.origin === 'base' ? 'Убрать из игры' : 'Удалить') + '</button></div>';
+        (it ? usesLine(o.id, cat) : '') +
+        '<div class="card-actions">' + (it ? tryBtn('try=' + o.id) : '') +
+        '<button class="btn small warn" data-act="odel">🗑 ' + (o.origin === 'base' ? 'Убрать из игры' : 'Удалить') + '</button></div></div>';
     }).join('');
     html += '</div>';
     var hid = list.filter(function (o) { return hidden.indexOf(o.id) >= 0; });
     if (hid.length) {
       html += '<h2 style="margin-top:16px">Убрано из игры</h2><ul class="hidden-list">' + hid.map(function (o) {
-        return '<li>' + esc(field(o, 'name')) + ' <button class="btn small" data-act="unhide" data-id="' + esc(o.id) + '">Вернуть</button></li>';
+        var ut = usesText(uses(o.id));
+        return '<li>' + esc(field(o, 'name')) + (ut ? ' <span class="muted">— вместе с ним отключены ' + ut + '</span>' : '') +
+          ' <button class="btn small" data-act="unhide" data-id="' + esc(o.id) + '">Вернуть</button></li>';
       }).join('') + '</ul>';
     }
     $('panel').innerHTML = html;
@@ -403,39 +588,69 @@
   });
   // после ухода из поля — перепроверяем всё движком игры
   panel.addEventListener('change', function () { refreshSoon(); });
-  panel.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-act]');
-    if (!b) return;
-    var act = b.getAttribute('data-act'), card = b.closest('.card');
-    if (act === 'cadd') {
-      D.claims.claims.unshift({ target: 'orca', ref: 'great_white', says: 1, source: 'social', text: 'Новое заявление — напишите текст', why: '' });
-    } else if (act === 'cdel') {
+
+  function act(b) {
+    var a = b.getAttribute('data-act'), card = b.closest('.card');
+    var id = card && card.getAttribute('data-id'), cat = card && card.getAttribute('data-cat');
+    if (a === 'nclose') return notice('');
+    if (a === 'gonew') return setTab('new');
+    if (a === 'cadd') {
+      var t0 = findItem('orca') || C.pools.animals[0], r0 = findItem('great_white') || C.pools.animals[1];
+      if (!t0 || !r0) return alert('Сначала нужны хотя бы два зверя');
+      D.claims.claims.unshift({ target: t0.id, ref: r0.id, says: 1, source: 'social', text: 'Новое заявление — напишите текст', why: '' });
+    } else if (a === 'cdel') {
       if (!confirm('Удалить это заявление?')) return;
       D.claims.claims.splice(+card.getAttribute('data-i'), 1);
-    } else if (act === 'odel') {
-      var id = card.getAttribute('data-id'), cat = card.getAttribute('data-cat');
-      if (card.getAttribute('data-origin') === 'manual') {
-        if (!confirm('Удалить этот объект?')) return;
-        D.items[cat].splice(+card.getAttribute('data-idx'), 1);
-      } else if (D.items.hidden.indexOf(id) < 0) D.items.hidden.push(id);
-    } else if (act === 'unhide') {
-      D.items.hidden = D.items.hidden.filter(function (x) { return x !== b.getAttribute('data-id'); });
-    } else if (act === 'eadd') {
-      var d = new Date(), d2 = new Date(Date.now() + 7 * 864e5);
-      D.game.events.unshift({ id: 'event' + Date.now(), from: iso(d), to: iso(d2), title: '🎉 Новое событие', text: '' });
-    } else if (act === 'edel') {
-      if (!confirm('Удалить это событие?')) return;
-      D.game.events.splice(+card.getAttribute('data-e'), 1);
-    } else if (act === 'padd') {
-      D.claims.prices.unshift({ item: 'phone', price: 50000, pay: 'note1000' });
-    } else if (act === 'pdel') {
+    } else if (a === 'padd') {
+      if (!C.pools.money.length) return alert('Сначала добавьте вещь во вкладке «Деньги: вещи»');
+      D.claims.prices.unshift({ item: C.pools.money[0].id, price: 50000, pay: 'note1000' });
+    } else if (a === 'pdel') {
       if (!confirm('Удалить эту задачу?')) return;
       D.claims.prices.splice(+card.getAttribute('data-p'), 1);
-    } else if (act === 'gonew') {
-      return setTab('new');
-    }
+    } else if (a === 'oclaim') {
+      var it = findItem(id), ref = it && partner(it, cat);
+      if (!ref) return alert('Не с кем сравнить — нужен ещё хотя бы один объект этой темы');
+      D.claims.claims.unshift(starterClaim(it, ref));
+      tab = 'claims';
+      notice('Добавлено заявление про «' + esc(it.name) + '» с эталоном «' + esc(ref.name) + '» — поправьте текст, если нужно. ' + tryBtn('claim=c0'));
+    } else if (a === 'oprice') {
+      D.claims.prices.unshift({ item: id, price: 1000, pay: 'note100' });
+      tab = 'prices';
+      notice('Добавлена задача с вещью «' + esc(nameOf(id)) + '» — укажите цену и чем платим. ' + tryBtn('task=p0'));
+    } else if (a === 'odel') {
+      var u = uses(id), ut = usesText(u), name = nameOf(id);
+      if (card.getAttribute('data-origin') === 'manual') {
+        var replacesBase = (BASEDATA[cat] || []).some(function (r) { return r.id === id; });
+        if (replacesBase) {
+          if (!confirm('Удалить вашу замену «' + name + '»? Вернётся встроенный объект.')) return;
+          D.items[cat].splice(+card.getAttribute('data-idx'), 1);
+        } else {
+          if (!confirm('Удалить «' + name + '» из игры?' + (ut ? '\n\nВместе с ним удалятся: ' + ut + '.' : ''))) return;
+          D.items[cat].splice(+card.getAttribute('data-idx'), 1);
+          removeAt(D.claims.claims, u.claims);
+          removeAt(D.claims.prices, u.prices);
+          dropTraps(id);
+        }
+      } else {
+        if (!confirm('Убрать «' + name + '» из игры?' + (ut ? '\n\nВместе с ним отключатся: ' + ut + '. Вернёте объект — вернутся и они.' : ''))) return;
+        if (D.items.hidden.indexOf(id) < 0) D.items.hidden.push(id);
+      }
+    } else if (a === 'unhide') {
+      D.items.hidden = D.items.hidden.filter(function (x) { return x !== b.getAttribute('data-id'); });
+    } else if (a === 'eadd') {
+      var d = new Date(), d2 = new Date(Date.now() + 7 * 864e5);
+      D.game.events.unshift({ id: 'event' + Date.now(), from: iso(d), to: iso(d2), title: 'Новое событие', text: '' });
+    } else if (a === 'edel') {
+      if (!confirm('Удалить это событие?')) return;
+      D.game.events.splice(+card.getAttribute('data-e'), 1);
+    } else return;
+    markTabs();
     save();
     refresh();
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]');
+    if (b && (panel.contains(b) || $('notice').contains(b))) act(b);
   });
 
   // ---------- новая картинка ----------
@@ -459,13 +674,21 @@
     return it;
   }
   function updatePreview() {
-    var country = $('f-kind').value === 'countries';
+    var cat = $('f-kind').value, country = cat === 'countries', money = cat === 'money';
     $('l-size').firstChild.textContent = country ? 'Площадь, км² ' : 'Размер, м ';
     $('l-dim').hidden = country;
-    $('l-ref').hidden = country;
-    if (C && !$('f-ref').options.length) {
-      $('f-ref').innerHTML = options('human');
+    $('l-ref').hidden = money;
+    $('l-claim').hidden = money;
+    $('l-price').hidden = !money;
+    $('l-pay').hidden = !money;
+    $('l-moneynote').hidden = !money;
+    // эталон — из той же темы: зверь со зверем, страна со страной
+    if (C && !money && $('f-ref').getAttribute('data-cat') !== cat) {
+      var def = country ? 'australia' : 'human';
+      $('f-ref').innerHTML = options(findItem(def) ? def : '', [cat]);
+      $('f-ref').setAttribute('data-cat', cat);
     }
+    if (C && !$('f-pay').options.length) $('f-pay').innerHTML = payOptions('note100');
     if (!dropped || !C) return;
     var it = newItem();
     App.assets.prepare(it).then(function () {
@@ -475,12 +698,12 @@
       var st = ['ref', 'g1', 'truth'].map(function (s) { var o = Object.assign({}, it); o._style = s; return o; });
       $('pv-styles').setAttribute('viewBox', '0 0 300 220');
       $('pv-styles').innerHTML = scene(st, 300, 220);
-      var ref = country ? null : findItem($('f-ref').value);
+      var ref = money ? findItem('phone') : findItem($('f-ref').value);
       var g = Object.assign({}, it, { _style: 'g1' });
       $('pv-scale').setAttribute('viewBox', '0 0 300 220');
       $('pv-scale').innerHTML = scene(ref ? [ref, g] : [Object.assign({}, it, { _style: 'ref' })], 300, 220);
       $('pv-note').textContent = ref ? 'В настоящем масштабе: ' + ref.name + ' (' + val(ref) + ') и ' + it.name + ' (' + val(it) + ')'
-        : 'Контур страны; площадь по пикселям подгоняется под ' + U.fmtArea(it.value);
+        : 'Контур; ' + (country ? 'площадь по пикселям подгоняется под ' + U.fmtArea(it.value) : 'размер ' + val(it));
     }).catch(function (e) {
       $('preview').hidden = true;
       $('btn-add').hidden = true;
@@ -488,22 +711,276 @@
       $('pv-error').textContent = '❌ ' + e.message;
     });
   }
+  // Новый объект сразу связывается с игрой: зверь и страна — с заявлением, вещь — с задачей
   $('btn-add').addEventListener('click', function () {
-    var cat = $('f-kind').value, id = $('f-id').value.trim();
+    var cat = $('f-kind').value, id = $('f-id').value.trim(), country = cat === 'countries';
     if (!/^[a-z0-9_]+$/.test(id)) return alert('id — только латинские буквы, цифры и _ (например okapi)');
-    if (findItem(id)) return alert('Объект с таким id уже есть');
+    if (allIds().indexOf(id) >= 0) return alert('Объект с таким id уже есть (в игре или среди убранных) — придумайте другой');
     var ext = (dropped.name.match(/\.(png|svg|webp)$/i) || ['', 'png'])[1].toLowerCase();
-    var rec = { id: id, name: $('f-name').value.trim() || id, image: dropped.url, fact: $('f-fact').value.trim(), _file: 'img/' + id + '.' + ext };
-    if (cat === 'countries') rec.area = num($('f-size').value); else { rec.size = num($('f-size').value); rec.dim = $('f-dim').value; }
+    var name = $('f-name').value.trim() || id;
+    var rec = { id: id, name: name, image: dropped.url, fact: $('f-fact').value.trim(), _file: 'img/' + id + '.' + ext };
+    if (country) rec.area = num($('f-size').value); else { rec.size = num($('f-size').value); rec.dim = $('f-dim').value; }
     D.items[cat].push(rec);
-    save();
+    var extra = '', q = 'try=' + id;
+    if (cat === 'money') {
+      var price = num($('f-price').value);
+      if (typeof price === 'number' && price > 0) {
+        D.claims.prices.unshift({ item: id, price: price, pay: $('f-pay').value });
+        extra = ' и задача «цена в купюрах»';
+        q = 'task=p0';
+      }
+    } else if ($('f-claim').checked) {
+      var ref = findItem($('f-ref').value);
+      var value = country ? rec.area : rec.size;
+      if (ref && typeof value === 'number' && value > 0) {
+        D.claims.claims.unshift(starterClaim({ kind: country ? 'country' : 'animal', name: name, value: value, id: id }, ref));
+        extra = ' и заявление-фейк с эталоном «' + ref.name + '»';
+        q = 'claim=c0';
+      }
+    }
     dropped = null;
     $('preview').hidden = true;
     $('btn-add').hidden = true;
-    setTab(cat);
+    tab = cat;
+    markTabs();
+    save();
+    refresh();
+    notice('Добавлено: «' + esc(name) + '»' + esc(extra) + '. ' + tryBtn(q) + ' Чтобы дети увидели — «🚀 Опубликовать в игру».');
   });
 
-  // ---------- выкладка ----------
+  // ---------- публикация в игру ----------
+  // Игра читает папку content с GitHub Pages. Публикация кладёт туда правки одним коммитом
+  // через API GitHub — без своего сервера. Токен вводит менеджер: он хранится только в этом
+  // браузере и уходит только в API GitHub.
+  var TOKEN_KEY = 'prikin.gh-token', TARGET_KEY = 'prikin.gh-target';
+  var DEFAULT_REPO = 'Holodoktop1creator/sberkids-hackathon-test';
+  // адрес API подменяется только на локальный — для проверки на заглушке, токен наружу не уйдёт
+  var API = (/[?&]api=(http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?)(?:&|$)/.exec(location.search) || [0, 'https://api.github.com'])[1];
+
+  function target() {
+    var t = { repo: DEFAULT_REPO, branch: 'main', dir: 'game/content' };
+    var m = /^([\w-]+)\.github\.io$/i.exec(location.hostname);
+    if (m) {
+      var seg = location.pathname.split('/')[1];
+      t.repo = m[1] + '/' + (seg && seg !== 'tools' ? seg : m[1] + '.github.io');
+    }
+    try {
+      var s = JSON.parse(localStorage.getItem(TARGET_KEY) || 'null');
+      if (s && s.repo) t = { repo: s.repo, branch: s.branch || 'main', dir: s.dir == null ? 'game/content' : s.dir };
+    } catch (e) { /* настройки по умолчанию */ }
+    return t;
+  }
+  function getToken() {
+    try { return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+  }
+  function putToken(tok, remember) {
+    try {
+      sessionStorage.setItem(TOKEN_KEY, tok);
+      if (remember) localStorage.setItem(TOKEN_KEY, tok); else localStorage.removeItem(TOKEN_KEY);
+    } catch (e) { /* без хранилища токен просто не запомнится */ }
+  }
+  function enc(path) { return path.split('/').map(encodeURIComponent).join('/'); }
+  function gh(tok, method, path, body) {
+    return fetch(API + path, {
+      method: method,
+      headers: { Authorization: 'Bearer ' + tok, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (r) {
+      return r.text().then(function (txt) {
+        var j = null;
+        try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
+        if (!r.ok) { var err = new Error((j && j.message) || ('HTTP ' + r.status)); err.status = r.status; throw err; }
+        return j;
+      });
+    });
+  }
+  function fromB64(s) {
+    var bin = atob(String(s).replace(/\s/g, '')), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  function toB64(dataUrl) {
+    var i = dataUrl.indexOf(','), head = dataUrl.slice(0, i), body = dataUrl.slice(i + 1);
+    if (/;base64$/i.test(head)) return body;
+    var bytes = new TextEncoder().encode(decodeURIComponent(body)), bin = '';
+    for (var k = 0; k < bytes.length; k++) bin += String.fromCharCode(bytes[k]);
+    return btoa(bin);
+  }
+  function seq(list, fn) { return list.reduce(function (p, x) { return p.then(function () { return fn(x); }); }, Promise.resolve()); }
+
+  // Что изменится у детей — человеческим языком; это же уходит в описание коммита
+  function changes() {
+    var out = [], p = pubJson();
+    ['animals', 'countries', 'money'].forEach(function (cat) {
+      var was = ORIG.items[cat].map(function (r) { return r.id; }), now = p.items[cat].map(function (r) { return r.id; });
+      now.forEach(function (id) { if (was.indexOf(id) < 0) out.push('Новый объект: ' + nameOf(id) + ' (' + CATS[cat].toLowerCase() + ')'); });
+      was.forEach(function (id) { if (now.indexOf(id) < 0) out.push('Удалён объект: ' + nameOf(id)); });
+    });
+    p.items.hidden.forEach(function (id) { if (ORIG.items.hidden.indexOf(id) < 0) out.push('Убран из игры: ' + nameOf(id)); });
+    ORIG.items.hidden.forEach(function (id) { if (p.items.hidden.indexOf(id) < 0) out.push('Возвращён в игру: ' + nameOf(id)); });
+    if (JSON.stringify(ORIG.items.edits) !== JSON.stringify(p.items.edits)) out.push('Правки названий, размеров и фактов');
+    if (!out.length && JSON.stringify(ORIG.items) !== JSON.stringify(p.items)) out.push('Правки объектов');
+    if (JSON.stringify(ORIG.claims.claims) !== JSON.stringify(p.claims.claims)) out.push('Заявления: было ' + ORIG.claims.claims.length + ', стало ' + p.claims.claims.length);
+    if (JSON.stringify(ORIG.claims.prices) !== JSON.stringify(p.claims.prices)) out.push('Задачи «цена в купюрах»: было ' + ORIG.claims.prices.length + ', стало ' + p.claims.prices.length);
+    if (JSON.stringify(ORIG.game) !== JSON.stringify(p.game)) out.push('Тексты, события и настройки игры');
+    return out;
+  }
+
+  function log(html, cls) {
+    var li = document.createElement('li');
+    if (cls) li.className = cls;
+    li.innerHTML = html;
+    $('pub-log').appendChild(li);
+  }
+  function openPublish() {
+    var t = target();
+    $('pub-repo').value = t.repo;
+    $('pub-branch').value = t.branch;
+    $('pub-dir').value = t.dir;
+    $('pub-where').textContent = t.repo + ' → ' + (t.dir || '/');
+    $('pub-token').value = getToken();
+    try { $('pub-remember').checked = !!localStorage.getItem(TOKEN_KEY); } catch (e) { $('pub-remember').checked = false; }
+    var list = changes();
+    $('pub-diff').innerHTML = list.length
+      ? '<b>Что изменится у детей:</b><ul class="diff">' + list.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>' +
+        (C.errors.length ? '<p class="errors">⚠️ В контенте есть ошибки (' + C.errors.length + ') — игра пропустит эти записи. Список — в блоке «Состояние».</p>' : '')
+      : '<p class="ok">Правок нет — у детей уже всё как здесь.</p>';
+    $('pub-go').disabled = !list.length;
+    $('pub-log').innerHTML = '';
+    $('pub').hidden = false;
+  }
+
+  // Файлы игры в репозитории сейчас — чтобы не затереть то, что кто-то опубликовал, пока вы работали
+  function remoteFiles(tok, repo, dir, ref) {
+    return Promise.all(FILES.map(function (k) {
+      return gh(tok, 'GET', repo + '/contents/' + enc(dir + k + '.json') + '?ref=' + ref)
+        .then(function (f) { return JSON.parse(fromB64(f.content)); })
+        .catch(function (e) { if (e.status === 404) return null; throw e; });
+    })).then(function (r) { return normalize({ game: r[0] || {}, items: r[1] || {}, claims: r[2] || {} }); });
+  }
+
+  var publishing = false;
+  function publish() {
+    if (publishing) return;
+    var tok = $('pub-token').value.trim();
+    var t = { repo: $('pub-repo').value.trim(), branch: $('pub-branch').value.trim() || 'main', dir: $('pub-dir').value.trim().replace(/^\/+|\/+$/g, '') };
+    $('pub-log').innerHTML = '';
+    if (!/^[\w.-]+\/[\w.-]+$/.test(t.repo)) return log('Репозиторий пишется как owner/repo', 'err');
+    if (!tok) return log('Вставьте токен GitHub', 'err');
+    putToken(tok, $('pub-remember').checked);
+    try { localStorage.setItem(TARGET_KEY, JSON.stringify(t)); } catch (e) { /* не страшно */ }
+    var out = pubJson(), files = changedFiles(out), list = changes();
+    if (!files.length) return log('Правок нет — публиковать нечего', 'ok');
+    var repo = '/repos/' + enc(t.repo), dir = t.dir ? t.dir + '/' : '', branch = enc(t.branch);
+    var images = out.images.filter(function (im) {
+      // картинка уже лежит в игре — повторно не грузим
+      return !ORIG.items.animals.concat(ORIG.items.countries, ORIG.items.money).some(function (r) { return r.image === im.name; });
+    });
+    publishing = true;
+    $('pub-go').disabled = true;
+
+    // Слияние по файлам: свои правки — в изменённые вами файлы; чужие правки в остальных файлах
+    // сохраняются и подтягиваются в редактор; спрашиваем, только если правили один и тот же файл
+    var theirs = {};
+    function attempt(n) {
+      var head, tree;
+      theirs = {};
+      log('Подключаюсь к ' + esc(t.repo) + ', ветка ' + esc(t.branch) + '…');
+      return gh(tok, 'GET', repo + '/git/ref/heads/' + branch)
+        .then(function (ref) { head = ref.object.sha; return gh(tok, 'GET', repo + '/git/commits/' + head); })
+        .then(function (c) {
+          tree = c.tree.sha;
+          log('Проверяю, не публиковал ли кто-то правки, пока вы работали…');
+          return remoteFiles(tok, repo, dir, head);
+        })
+        .then(function (remote) {
+          var changedThere = FILES.filter(function (k) { return JSON.stringify(remote[k]) !== JSON.stringify(ORIG[k]); });
+          var clash = changedThere.filter(function (k) { return files.indexOf(k) >= 0; });
+          if (clash.length && !confirm('Пока вы работали, кто-то опубликовал правки в тех же файлах: ' + clash.map(function (k) { return k + '.json'; }).join(', ') +
+            '. Если продолжить, их правки в этих файлах заменятся вашими.\n\nОпубликовать всё равно?')) {
+            var stop = new Error('Публикация отменена. Чтобы увидеть чужие правки, сохраните свои заметки и нажмите «↺ Отменить все изменения»');
+            stop.cancelled = true;
+            throw stop;
+          }
+          changedThere.forEach(function (k) { if (files.indexOf(k) < 0) theirs[k] = remote[k]; });
+          if (Object.keys(theirs).length) log('Чужие правки в ' + Object.keys(theirs).map(function (k) { return k + '.json'; }).join(', ') + ' сохраняю — вы эти файлы не меняли');
+          if (images.length) log('Загружаю картинки: ' + images.length + '…');
+          return seq(images, function (im) {
+            return gh(tok, 'POST', repo + '/git/blobs', { content: toB64(im.url), encoding: 'base64' }).then(function (b) { im.sha = b.sha; });
+          });
+        })
+        .then(function () {
+          log('Собираю коммит: ' + files.map(function (k) { return k + '.json'; }).concat(images.map(function (im) { return im.name; })).join(', ') + '…');
+          var entries = files.map(function (k) {
+            return { path: dir + k + '.json', mode: '100644', type: 'blob', content: JSON.stringify(out[k], null, 2) + '\n' };
+          }).concat(images.map(function (im) { return { path: dir + im.name, mode: '100644', type: 'blob', sha: im.sha }; }));
+          return gh(tok, 'POST', repo + '/git/trees', { base_tree: tree, tree: entries });
+        })
+        .then(function (nt) {
+          return gh(tok, 'POST', repo + '/git/commits', {
+            message: 'Контент: правки из редактора\n\n' + list.map(function (x) { return '- ' + x; }).join('\n') + '\n', tree: nt.sha, parents: [head]
+          });
+        })
+        .then(function (nc) { return gh(tok, 'PATCH', repo + '/git/refs/heads/' + branch, { sha: nc.sha, force: false }); })
+        .catch(function (e) {
+          // кто-то опубликовал между нашими шагами — пробуем ещё раз с самого начала
+          if (e.status === 422 && n === 0 && !e.cancelled) { log('Ветка обновилась, пока шла публикация — повторяю…'); return attempt(1); }
+          throw e;
+        });
+    }
+
+    attempt(0).then(function () {
+      // в редактор — то, что теперь в игре: ваши файлы и подтянутые чужие
+      Object.keys(theirs).forEach(function (k) { D[k] = clone(theirs[k]); out[k] = theirs[k]; });
+      ORIG = clone({ game: out.game, items: out.items, claims: out.claims });
+      save();
+      if (Object.keys(theirs).length) refresh();
+      log('✓ Опубликовано. GitHub Pages обновит игру примерно за минуту — жду, пока она начнёт показывать новые файлы…', 'ok');
+      waitLive(clone(ORIG), out.images);
+    }).catch(function (e) {
+      log(esc(e.cancelled ? e.message
+        : e.status === 401 ? 'Токен не подошёл — проверьте, что он скопирован целиком и не истёк'
+        : e.status === 403 || e.status === 404 ? 'Нет доступа к репозиторию или ветке. Нужен токен с правом Contents: Read and write на этот репозиторий'
+        : e.status === 409 || e.status === 422 ? 'Кто-то публикует одновременно с вами — нажмите «Опубликовать» ещё раз'
+        : 'Не получилось: ' + (e.message || e)), 'err');
+    }).then(function () {
+      publishing = false;
+      $('pub-go').disabled = false;
+    });
+  }
+
+  // Ждём, когда игра начнёт отдавать опубликованные файлы; после этого новые картинки в черновике —
+  // уже не data URL, а файлы рядом с игрой
+  function waitLive(pub, images) {
+    var t0 = Date.now();
+    (function poll() {
+      Promise.all(FILES.map(function (k) {
+        return fetch(BASE + k + '.json?v=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+      })).then(function (r) {
+        var live = normalize({ game: r[0] || {}, items: r[1] || {}, claims: r[2] || {} });
+        if (FILES.every(function (k) { return JSON.stringify(live[k]) === JSON.stringify(pub[k]); })) {
+          var touched = false;
+          ['animals', 'countries', 'money'].forEach(function (cat) {
+            D.items[cat].forEach(function (rec) {
+              images.forEach(function (im) { if (rec.image === im.url) { rec.image = im.name; delete rec._file; touched = true; } });
+            });
+          });
+          if (touched) { save(); refresh(); }
+          log('✓ Готово — игра уже показывает ваши правки. <a href="../game/" target="_blank" rel="noopener">Открыть игру</a>', 'ok');
+          return;
+        }
+        if (Date.now() - t0 < 300000) setTimeout(poll, 8000);
+        else log('Игра пока отдаёт прежние файлы. Обычно GitHub Pages обновляется за 1–2 минуты — проверьте игру чуть позже.', 'err');
+      });
+    })();
+  }
+
+  $('btn-publish').addEventListener('click', function () { if (C) openPublish(); });
+  $('pub-go').addEventListener('click', publish);
+  $('pub-close').addEventListener('click', function () { $('pub').hidden = true; });
+  $('pub').addEventListener('click', function (e) { if (e.target === this) this.hidden = true; });
+
+  // ---------- выкладка файлами на любой другой CDN ----------
   function download(name, content, type) {
     var url = typeof content === 'string' && /^data:/.test(content) ? content
       : URL.createObjectURL(new Blob([typeof content === 'string' ? content : JSON.stringify(content, null, 2) + '\n'], { type: type || 'application/json' }));
@@ -515,36 +992,30 @@
     a.remove();
   }
   $('btn-export').addEventListener('click', function () {
-    var items = clone(D.items), images = [];
-    ['animals', 'countries', 'money'].forEach(function (cat) {
-      items[cat].forEach(function (r) {
-        if (/^data:/.test(r.image || '')) {
-          var f = r._file || ('img/' + r.id + '.png');
-          images.push({ name: f.split('/').pop(), url: r.image });
-          r.image = f;
-        }
-        delete r._file;
-      });
-    });
-    var files = [['game.json', D.game], ['claims.json', D.claims], ['items.json', items]];
-    images.forEach(function (im) { files.push([im.name, im.url]); });
+    var p = pubJson();
+    var files = FILES.map(function (k) { return [k + '.json', p[k]]; });
+    p.images.forEach(function (im) { files.push([im.name.split('/').pop(), im.url]); });
     files.forEach(function (f, i) { setTimeout(function () { download(f[0], f[1]); }, i * 400); });
     alert('Скачиваются файлы: ' + files.map(function (f) { return f[0]; }).join(', ') +
-      '.\n\nПоложите JSON-файлы в папку game/content, а картинки — в game/content/img на CDN. Игра подхватит изменения при следующем запуске, без релиза.');
+      '.\n\nПоложите JSON-файлы в папку content рядом с игрой (или на CDN, адрес которого указан в game/index.html), а картинки — в content/img. Игра подхватит изменения при следующем запуске, без релиза.');
   });
-  $('btn-play').addEventListener('click', function () { save(); window.open('../game/?draft=1', '_blank'); });
+  $('btn-play').addEventListener('click', function () { openGame(''); });
   $('btn-reset').addEventListener('click', function () {
-    if (!confirm('Отменить все изменения и вернуться к выложенным файлам?')) return;
+    if (!confirm('Отменить все неопубликованные изменения и вернуться к тому, что сейчас в игре?')) return;
     try { localStorage.removeItem(KEY); } catch (e) { /* ничего */ }
     D = normalize(clone(ORIG));
+    notice('');
     status();
     refresh();
   });
 
   // ---------- вкладки ----------
+  function markTabs() {
+    Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (x) { x.classList.toggle('on', x.getAttribute('data-tab') === tab); });
+  }
   function setTab(t) {
     tab = t;
-    Array.prototype.forEach.call(document.querySelectorAll('#tabs button'), function (x) { x.classList.toggle('on', x.getAttribute('data-tab') === t); });
+    markTabs();
     renderTab();
     if (t === 'new') $('new-box').scrollIntoView({ behavior: 'smooth' });
   }
@@ -557,8 +1028,8 @@
 
   // ---------- старт ----------
   Promise.all([getJSON('game.json'), getJSON('claims.json'), getJSON('items.json'), getJSON('animals.json'), getJSON('countries.json')]).then(function (r) {
-    ORIG = normalize({ game: r[0] || {}, claims: r[1] || {}, items: r[2] || {} });
-    ORIG = { game: ORIG.game, items: ORIG.items, claims: ORIG.claims };
+    var o = normalize({ game: r[0] || {}, items: r[2] || {}, claims: r[1] || {} });
+    ORIG = { game: o.game, items: o.items, claims: o.claims };
     BASEDATA = { animals: (r[3] && r[3].animals) || [], countries: (r[4] && r[4].countries) || [] };
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { saved = null; }

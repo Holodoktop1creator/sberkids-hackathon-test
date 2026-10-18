@@ -665,18 +665,20 @@
   });
 
   // ---------- Старт ----------
-  function startSolo(mode) {
+  // first — раунд, который встанет первым: так редактор показывает менеджеру его правку в игре
+  function startSolo(mode, first) {
     App.sound.play('tap');
     S.duel = false;
     S.turn = 1;
     S.mode = mode || S.mode;
     var cfg = S.content.cfg;
-    S.rounds = App.content.makeRun(S.content, S.mode, cfg.rounds, cfg.boss);
+    S.rounds = App.content.makeRun(S.content, S.mode, cfg.rounds, cfg.boss, first);
     S.results = [];
     S.score = 0;
     S.hudShown = 0;
     S.combo = 0;
     S.bestCombo = 0;
+    S.started = true;
     show('scr-game');
     playRound(0);
   }
@@ -765,8 +767,28 @@
       $('btn-duel').disabled = !(a || k || mo);
       $('load-error').hidden = a || k || mo;
       applyLook(c);
-      if (c.draft) toast('Черновик менеджера: игра с правками, которые ещё не выложены');
+      var note = c.draft ? 'Черновик менеджера: игра с правками, которые ещё не опубликованы' : '';
+      var spec = checkSpec();
+      if (spec && !S.started) {
+        var first = App.content.pick(c, spec);
+        if (first) {
+          startSolo(first.kind, first);
+          note = 'Проверка из редактора: в первом раунде — ' + (first.claim.task ? first.ref.name : first.target.name + ' и ' + first.ref.name);
+        } else {
+          note = 'Этого нет в игре: объект убран, не загрузился или запись с ошибкой — посмотрите в редакторе';
+        }
+      }
+      if (note) toast(note);
     });
+  }
+
+  // Ссылка из редактора контента: ?claim=c3, ?task=p2 или ?try=okapi — этот раунд будет первым
+  function checkSpec() {
+    var q = location.search, m;
+    if ((m = /[?&]claim=(c\d+)/.exec(q))) return { claim: m[1] };
+    if ((m = /[?&]task=(p\d+)/.exec(q))) return { task: m[1] };
+    if ((m = /[?&]try=([\w-]+)/.exec(q))) return { item: m[1] };
+    return null;
   }
 
   // Наряд Капи на старте: открытые в сессии вещи + то, что задаёт событие

@@ -183,10 +183,19 @@
     return o;
   }
 
+  // Откуда игра берёт контент: по умолчанию папка content рядом с игрой. Если игру хостит
+  // приложение, а актуальные конфиги лежат на CDN, адрес папки задаётся в index.html:
+  // <meta name="prikin-content" content="https://cdn…/content/"> — CDN должен отдавать CORS
+  function contentBase() {
+    var m = document.querySelector('meta[name="prikin-content"]');
+    var v = m ? (m.getAttribute('content') || '').trim() : '';
+    return /^(https:\/\/[^\s"'<>]+|[\w.\-\/]+)\/$/.test(v) ? v : 'content/';
+  }
+
   // base — папка контента ('content/' в игре), date — подменить «сегодня» для проверки событий,
   // override — { game, items, claims }: подставить эти данные вместо файлов (черновик)
   function load(base, date, override) {
-    base = base || 'content/';
+    base = base || contentBase();
     override = override || readDraft();
     var errors = [];
     function safe(name) {
@@ -223,6 +232,9 @@
           pools: { animals: animals.filter(ok), countries: countries.filter(ok), money: money.filter(ok) },
           event: activeEvent(cfg, date),
           errors: errors,
+          // убранные менеджером объекты: всё, что на них ссылается, отключается вместе с ними
+          hidden: hidden,
+          off: [],
           draft: !!override
         };
         checkTraps(content);
@@ -238,15 +250,22 @@
     return null;
   }
 
+  // Ссылка на объект, который менеджер убрал из игры, — не ошибка: запись отключена вместе с ним
+  // и вернётся, когда объект вернут
+  function isOff(content, ids) {
+    return ids.length > 0 && ids.every(function (id) { return content.hidden.indexOf(id) >= 0; });
+  }
+
   function checkTraps(content) {
     var lists = [['пары-ловушки', content.cfg.traps]];
     if (content.event && content.event.traps) lists.push(['события «' + content.event.title + '»', content.event.traps]);
     lists.forEach(function (l) {
       ['animals', 'countries'].forEach(function (kind) {
         (l[1][kind] || []).forEach(function (p) {
-          if (!byId(content.pools[kind], p[0]) || !byId(content.pools[kind], p[1])) {
-            content.errors.push('В списке ' + l[0] + ' нет объекта: ' + p.join(' / '));
-          }
+          var miss = [p[0], p[1]].filter(function (id) { return !byId(content.pools[kind], id); });
+          if (!miss.length) return;
+          if (isOff(content, miss)) content.off.push({ type: 'trap', uid: l[0] + ':' + p.join('/'), ids: miss });
+          else content.errors.push('В списке ' + l[0] + ' нет объекта: ' + p.join(' / '));
         });
       });
     });
@@ -284,6 +303,8 @@
         if (a && b && a !== b) { kind = k; t = a; r = b; }
       });
       if (!kind || !isNum(c.says) || !isStr(c.text)) {
+        var gone = c ? [c.target, c.ref].filter(function (id) { return content.hidden.indexOf(id) >= 0; }) : [];
+        if (gone.length) { content.off.push({ type: 'claim', uid: 'c' + i, ids: gone }); return; }
         content.errors.push('Заявление №' + (i + 1) + ' с ошибкой: ' + (c && c.text ? c.text : JSON.stringify(c).slice(0, 60)));
         return;
       }
@@ -300,6 +321,19 @@
   }
   function lowerName(it) { return it.kind === 'country' ? it.name : it.name.charAt(0).toLowerCase() + it.name.slice(1); }
 
+  // Текст «X в N раз больше, чем Y» с округлённым числом — им пишет заявления игра,
+  // и им же редактор пишет заявление для нового объекта
+  function sayText(t, r, says) {
+    var area = t.kind === 'country';
+    var bigger = says >= 1;
+    var x = bigger ? says : 1 / says;
+    x = x >= 10 ? Math.round(x) : Math.round(x * 10) / 10;
+    var text = x === 1
+      ? t.name + ' и ' + lowerName(r) + (area ? ' одинаковые по площади.' : ' — одного размера.')
+      : t.name + (area ? ' по площади' : '') + ' в ' + U.fmtRatio(x) + ' ' + razWord(x) + (bigger ? ' больше' : ' меньше') + ', чем ' + lowerName(r) + '.';
+    return { says: bigger ? x : 1 / x, text: text };
+  }
+
   // Заявление для любой пары: иногда правда, чаще враньё в 1,6–2,6 раза
   function autoClaim(p, kind, forceFake) {
     var t = p.target, r = p.ref;
@@ -310,15 +344,8 @@
       var lin = Math.random() < 0.5 ? U.rand(0.4, 0.62) : U.rand(1.6, 2.6);
       says = k * (kind === 'countries' ? lin * lin : lin);
     }
-    var bigger = says >= 1;
-    var x = bigger ? says : 1 / says;
-    x = x >= 10 ? Math.round(x) : Math.round(x * 10) / 10;
-    says = bigger ? x : 1 / x;
-    var area = kind === 'countries';
-    var text = x === 1
-      ? t.name + ' и ' + lowerName(r) + (area ? ' одинаковые по площади.' : ' — одного размера.')
-      : t.name + (area ? ' по площади' : '') + ' в ' + U.fmtRatio(x) + ' ' + razWord(x) + (bigger ? ' больше' : ' меньше') + ', чем ' + lowerName(r) + '.';
-    return makeClaim(t, r, says, 'rumor', text, '');
+    var s = sayText(t, r, says);
+    return makeClaim(t, r, s.says, 'rumor', s.text, '');
   }
 
   // ---------- «Цена в купюрах» ----------
@@ -357,6 +384,7 @@
       var pay = p && PAY[p.pay];
       var count = pay && isNum(p.price) ? Math.round(p.price / pay.rub) : 0;
       if (!item || !pay || count < 1 || count > 100000) {
+        if (p && isOff(content, [p.item])) { content.off.push({ type: 'price', uid: 'p' + i, ids: [p.item] }); return; }
         content.errors.push('Задача «цена в купюрах» №' + (i + 1) + ' с ошибкой: нужны вещь, цена и чем платим');
         return;
       }
@@ -415,11 +443,12 @@
   // Набор раундов. mode: animals | countries | money | chaos.
   // Звери и карты — заявления «фейк или правда», деньги — только задачи «цена в купюрах».
   // Во время события босс-раунды зверей и карт берутся из его пар.
-  function makeRun(content, mode, n, boss) {
+  // first — готовый раунд, который встанет первым (проверка из редактора, см. pickRound)
+  function makeRun(content, mode, n, boss, first) {
     var kinds = [];
     var cats = ['animals', 'countries'].filter(function (k) { return content.pools[k] && content.pools[k].length >= 4; });
     if ((content.tasks || []).length >= 3) cats.push('money');
-    if (!cats.length) return [];
+    if (!cats.length) return first ? [first] : [];
     if (mode === 'chaos') {
       // все темы вперемешку, поровну
       for (var i = 0; i < n; i++) kinds.push(cats[i % cats.length]);
@@ -431,6 +460,11 @@
     var used = {}, usedClaims = {};
     var out = [];
     var claims = content.claims || { animals: [], countries: [] };
+    if (first) {
+      used[first.target.id] = true;
+      if (first.claim.uid) usedClaims[first.claim.uid] = true;
+      firstMoney = false;
+    }
     var eventBoss = !!(content.event && content.event.traps);
     kinds.forEach(function (kind, idx) {
       var isBoss = (boss || []).indexOf(idx + 1) >= 0;
@@ -468,7 +502,42 @@
       p.boss = isBoss;
       out.push(p);
     });
+    if (first) out[0] = first;
     return out;
+  }
+
+  // Раунд для проверки из редактора: заявление (c3), задача (p2) или объект по id.
+  // Объект попадёт в своё заявление или задачу, а если их нет — в пару с подходящим эталоном.
+  function pickRound(content, spec) {
+    var claims = content.claims || { animals: [], countries: [] };
+    var kinds = ['animals', 'countries'];
+    var found = null;
+    function fromClaim(test) {
+      kinds.forEach(function (k) {
+        (claims[k] || []).forEach(function (c) { if (!found && test(c)) found = { target: c.target, ref: c.ref, claim: c, kind: k }; });
+      });
+    }
+    function fromTask(test) {
+      (content.tasks || []).forEach(function (t) { if (!found && test(t)) found = taskRound(t); });
+    }
+    if (spec.claim) fromClaim(function (c) { return c.uid === spec.claim; });
+    else if (spec.task) fromTask(function (t) { return t.uid === spec.task; });
+    else if (spec.item) {
+      var id = spec.item;
+      fromTask(function (t) { return t.ref.id === id; });
+      fromClaim(function (c) { return c.target.id === id || c.ref.id === id; });
+      kinds.forEach(function (k) {
+        var it = !found && byId(content.pools[k], id);
+        if (!it) return;
+        var p = randomPair(content.pools[k], content.cfg.ratio[k] || [1.2, 15], {}, it) || randomPair(content.pools[k], [1, 1e9], {}, it);
+        if (!p) return;
+        p.kind = k;
+        p.claim = autoClaim(p, k, true);
+        found = p;
+      });
+    }
+    if (found) found.boss = false;
+    return found;
   }
 
   // Реванш: та же цель, но другой эталон.
@@ -503,5 +572,8 @@
       .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
   }
 
-  App.content = { load: load, makeRun: makeRun, rematch: rematch, rich: rich, DIM: DIM, SOURCES: SOURCES, DRAFT_KEY: DRAFT_KEY, PAY: PAY };
+  App.content = {
+    load: load, makeRun: makeRun, rematch: rematch, rich: rich, pick: pickRound, sayText: sayText,
+    DIM: DIM, SOURCES: SOURCES, DRAFT_KEY: DRAFT_KEY, PAY: PAY
+  };
 })();
