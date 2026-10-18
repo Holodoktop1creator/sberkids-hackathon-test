@@ -13,6 +13,10 @@
     "duel": true,
     "money": true
   },
+  "units": {
+    "show": true,
+    "max": 20
+  },
   "theme": {
     "animals": "#ffe9c4",
     "countries": "#dcefff",
