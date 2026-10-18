@@ -625,6 +625,7 @@
       $('btn-duel').disabled = !(a || k || mo);
       $('load-error').hidden = a || k || mo;
       applyLook(c);
+      if (c.draft) toast('✏️ Черновик менеджера: игра с правками, которые ещё не выложены');
     });
   }
 

@@ -131,21 +131,44 @@
     return null;
   }
 
-  // base — папка контента ('content/' в игре), date — подменить «сегодня» для проверки событий
-  function load(base, date) {
+  // Черновик контент-менеджера: страница tools/content.html кладёт его в браузер,
+  // а игра, открытая с ?draft, берёт его вместо файлов — чтобы увидеть правки до выкладки
+  var DRAFT_KEY = 'prikin.draft';
+  function readDraft() {
+    if (!/[?&]draft\b/.test(location.search)) return null;
+    try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { return null; }
+  }
+
+  // Поправки к любому объекту по id (items.json → edits): большие файлы с силуэтами не трогаем
+  var EDITABLE = ['name', 'fact', 'size', 'area', 'dim'];
+  function withEdits(raw, edits) {
+    var e = raw && edits[raw.id];
+    if (!e || typeof e !== 'object') return raw;
+    var o = {};
+    Object.keys(raw).forEach(function (k) { o[k] = raw[k]; });
+    EDITABLE.forEach(function (f) { if (e[f] !== undefined) o[f] = e[f]; });
+    return o;
+  }
+
+  // base — папка контента ('content/' в игре), date — подменить «сегодня» для проверки событий,
+  // override — { game, items, claims }: подставить эти данные вместо файлов (черновик)
+  function load(base, date, override) {
     base = base || 'content/';
+    override = override || readDraft();
     var errors = [];
     function safe(name) {
       return getJSON(base + name).catch(function (e) { errors.push('Файл ' + name + ' не загрузился (' + e.message + ')'); return null; });
     }
-    return Promise.all([safe('game.json'), safe('animals.json'), safe('countries.json'), safe('items.json'), safe('claims.json')]).then(function (res) {
+    function pick(name, key) { return override && override[key] ? Promise.resolve(override[key]) : safe(name); }
+    return Promise.all([pick('game.json', 'game'), safe('animals.json'), safe('countries.json'), pick('items.json', 'items'), pick('claims.json', 'claims')]).then(function (res) {
       var cfg = config(res[0]);
       var extra = res[3] && typeof res[3] === 'object' ? res[3] : {};
       var hidden = Array.isArray(extra.hidden) ? extra.hidden : [];
+      var edits = extra.edits && typeof extra.edits === 'object' ? extra.edits : {};
       function build(list, fn, label) {
         var byId = {}, order = [];
         (list || []).forEach(function (raw) {
-          var it = fn(raw, base);
+          var it = fn(withEdits(raw, edits), base);
           if (!it) { errors.push(label + ': запись с ошибкой — ' + (raw && raw.id ? raw.id : JSON.stringify(raw).slice(0, 60))); return; }
           if (!byId[it.id]) order.push(it.id);
           byId[it.id] = it; // запись из items.json заменяет одноимённую
@@ -166,7 +189,8 @@
           cfg: cfg,
           pools: { animals: animals.filter(ok), countries: countries.filter(ok), money: money.filter(ok) },
           event: activeEvent(cfg, date),
-          errors: errors
+          errors: errors,
+          draft: !!override
         };
         checkTraps(content);
         content.claims = buildClaims(res[4], content);
@@ -354,5 +378,5 @@
       .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
   }
 
-  App.content = { load: load, makeRun: makeRun, rematch: rematch, rich: rich, DIM: DIM };
+  App.content = { load: load, makeRun: makeRun, rematch: rematch, rich: rich, DIM: DIM, SOURCES: SOURCES, DRAFT_KEY: DRAFT_KEY };
 })();
