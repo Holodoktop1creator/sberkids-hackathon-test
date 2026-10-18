@@ -48,7 +48,7 @@ ANIMALS = [
     ("cheetah", "Гепард", "Acinonyx jubatus", 2.0, "tail", "Разгоняется до 100 км/ч за 3 секунды."),
     ("flamingo", "Фламинго", "Phoenicopterus roseus|Phoenicopterus", 1.3, "tall", "Розовый из-за еды — рачков и водорослей."),
     ("penguin", "Императорский пингвин", "Aptenodytes forsteri", 1.2, "tall", "Ныряет глубже 500 метров."),
-    ("capybara", "Капибара", "Hydrochoerus hydrochaeris|Hydrochoerus", 1.2, "long", "Самый большой грызун на Земле. Как Капи! 🍊"),
+    ("capybara", "Капибара", "Hydrochoerus hydrochaeris|Hydrochoerus", 1.2, "long", "Самый большой грызун на Земле. Как Капи!"),
     ("wolf", "Волк", "Canis lupus", 1.6, "tail", "Вой волка слышно за много километров."),
     ("koala", "Коала", "Phascolarctos cinereus", 0.75, "tall", "Спит до 20 часов в сутки."),
     ("fox", "Лиса", "Vulpes vulpes", 1.1, "tail", "Слышит, как мышь шуршит под снегом."),

@@ -3,8 +3,8 @@
   var App = window.App;
   var U = App.util;
 
-  // Доска раунда: чёрный эталон в истинном масштабе, белая догадка игрока
-  // и (после фиксации) салатовый контур правильного ответа.
+  // Доска раунда: светлый эталон в истинном масштабе, лаймовая догадка игрока
+  // и (после фиксации) бирюзовый пунктир правильного ответа.
   // Камера сама подстраивает зум, чтобы всё помещалось на вертикальном экране.
   var PAD = 14, TOP = 46, BOTTOM = 40, LABEL = 36, GAP = 22;
   var K = Math.LN2 / 170;          // 170 px свайпа = размер ×2
@@ -27,7 +27,7 @@
     el = container;
     onChange = cb;
     el.innerHTML =
-      '<div class="bgrid"></div>' +
+      '<div class="bglow"></div>' +
       '<svg class="bsvg" xmlns="http://www.w3.org/2000/svg">' +
       '<g class="grounds"></g>' +
       '<g class="item ref"><g class="shape"></g></g>' +
@@ -35,10 +35,12 @@
       '<g class="item guess g2"><g class="shape"></g></g>' +
       '<g class="item truth"><g class="shape"></g></g>' +
       '</svg>' +
-      '<div class="chip-ref"></div>' +
-      '<div class="vchip v1"></div><div class="vchip v2"></div><div class="vchip vt"></div>' +
+      '<div class="chip-ref"><i></i><b></b><span></span></div>' +
+      '<div class="vchip v1"><span></span></div><div class="vchip v2"><span></span></div>' +
+      '<div class="vchip vt">' + U.icon('check') + '<span></span></div>' +
       '<div class="ruler"><i></i><span></span></div>' +
-      '<div class="swipe-demo" aria-hidden="true"><i>▲</i><span class="sd-hand">👆</span><i>▼</i></div>';
+      '<div class="scan"></div>' +
+      '<div class="swipe-demo" aria-hidden="true">' + U.icon('up') + '<span class="sd-hand"></span>' + U.icon('down') + '</div>';
     svg = el.querySelector('.bsvg');
     ['ref', 'g1', 'g2', 'truth'].forEach(function (k) {
       var g = svg.querySelector(k === 'ref' ? '.ref' : k === 'truth' ? '.truth' : '.' + k);
@@ -152,7 +154,8 @@
   function chip(c, b, text, on, side) {
     if (!on) { c.style.opacity = '0'; return; }
     c.style.opacity = '1';
-    c.textContent = text;
+    // текст меняем, только когда он другой: render крутится каждый кадр
+    if (c._text !== text) { c._text = text; c.lastChild.textContent = text; }
     var x = side === 'right' ? b.x + b.w : b.x + b.w / 2;
     var y = Math.max(TOP + 4, b.y - 6);
     c.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) translate(' + (side === 'right' ? '-100%' : '-50%') + ',-100%)';
@@ -198,7 +201,7 @@
 
     chip(chips.v1, b1, fmtVal(R.target, value(R.target, gOf(0))), st.show[0], 'center');
     chip(chips.v2, b2, fmtVal(R.target, value(R.target, gOf(1))), st.show[1], 'center');
-    chip(chips.vt, bt, '✓ ' + fmtVal(R.target, R.target.value), st.truth, 'right');
+    chip(chips.vt, bt, fmtVal(R.target, R.target.value), st.truth, 'right');
 
     // линейка в мировых единицах
     var units = niceLen((W - PAD * 2) * 0.28 / s);
@@ -210,7 +213,7 @@
     if (demo.on) {
       var sn = Math.sin((performance.now() - demo.t0) / 1000 * Math.PI * 2 / DEMO_PERIOD);
       demo.k = Math.exp(0.35 * sn);
-      demo.hand.style.transform = 'translateY(' + (-sn * 44).toFixed(1) + 'px)';
+      demo.hand.style.transform = 'translateY(' + (-sn * 38).toFixed(1) + 'px)';
     }
     var target = goal();
     cam.s += (target - cam.s) * 0.22;
@@ -247,6 +250,10 @@
   // так у континентов не видно внутренних границ стран, остаётся только внешний контур
   function shapeOf(item, which) {
     if (item.layers) return App.assets.layer(item, which);
+    // у стопки купюр пунктир правды — только по внешнему краю, без каждой купюры
+    if (which === 'truth' && item.stretch) {
+      return '<path d="M' + item.vb[0] + ' ' + item.vb[1] + 'h' + item.vb[2] + 'v' + item.vb[3] + 'h' + (-item.vb[2]) + 'z"/>';
+    }
     if (which === 'g1' || which === 'g2') return '<g class="ol">' + item.markup + '</g><g class="fl">' + item.markup + '</g>';
     return item.markup;
   }
@@ -271,7 +278,9 @@
     // рост сравнивают на общей земле, длину — друг под другом от одного края
     var tall = R.kind !== 'countries' && R.target.dim === 'tall';
     mode = rowFit >= colFit * (tall ? 0.5 : 1) ? 'row' : 'col';
-    chips.ref.textContent = '⬛ ' + R.ref.name + ' · ' + fmtVal(R.ref, R.ref.value) + (R.kind === 'countries' ? '' : ' ' + R.ref.dimText);
+    // легенда: цветной квадрат эталона, имя и настоящий размер
+    chips.ref.children[1].textContent = R.ref.name;
+    chips.ref.children[2].textContent = fmtVal(R.ref, R.ref.value) + (R.kind === 'countries' ? '' : ' ' + R.ref.dimText);
     cam.s = goal();
     render();
   }

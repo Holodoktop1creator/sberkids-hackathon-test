@@ -3,6 +3,7 @@
   var App = window.App;
   var U = App.util;
   var B = App.board;
+  var ic = U.icon;
   function $(id) { return document.getElementById(id); }
 
   var S = {
@@ -13,6 +14,7 @@
     idx: 0,
     results: [],
     score: 0,
+    hudShown: 0,     // сколько очков уже показано в HUD — счётчик доезжает до score
     combo: 0,
     bestCombo: 0,
     turn: 1,
@@ -29,6 +31,10 @@
     epoch: 0         // меняется при новом раунде и выходе в меню — отменяет отложенные шаги
   };
   var capyEnd = $('capy-end');
+
+  // Цвета палитры для canvas-эффектов и карточки (те же, что в css/style.css)
+  var C = { lime: '#d4f55a', teal: '#3fd8c8', green: '#5ddc8c', red: '#ff5a4f', amber: '#ffb547', violet: '#a98bff', text: '#f3f4f6', mute: '#454a52' };
+  var BAND_COLOR = [C.mute, C.amber, C.green, C.lime];
 
   // ---------- Экраны ----------
   function show(id) {
@@ -51,13 +57,15 @@
     return x >= 1 ? 0 : Math.round(100 * Math.pow(1 - x, 1.52));
   }
   function band(p) { return p >= 85 ? 3 : p >= 65 ? 2 : p >= 40 ? 1 : 0; }
-  function square(p) { return ['⬜', '🟧', '🟨', '🟩'][band(p)]; }
+  // цветные квадраты только для текста «поделиться»: так сетку узнают в мессенджере
+  function shareSquare(p) { return ['⬜', '🟧', '🟨', '🟩'][band(p)]; }
   function rankText(p) {
     var r = S.content.cfg.ranks;
     for (var i = 0; i < r.length; i++) if (p >= r[i].min) return r[i].text;
     return '';
   }
   function maxScore() { return S.rounds.reduce(function (a, r) { return a + (r.boss ? 200 : 100); }, 0); }
+  function pointsWord(n) { return U.plural(n, ['очко', 'очка', 'очков']); }
 
   // ---------- HUD ----------
   function updateHud() {
@@ -71,13 +79,20 @@
     }
     $('dots').innerHTML = html;
     var hs = $('hud-score');
-    hs.innerHTML = S.duel
-      ? S.duelScore[0] + ' : <span style="color:var(--hot)">' + S.duelScore[1] + '</span>'
-      : String(S.score);
-    restart(hs, 'bump');
+    if (S.duel) {
+      hs.innerHTML = S.duelScore[0] + ' : <span class="p2">' + S.duelScore[1] + '</span>';
+    } else if (S.hudShown !== S.score) {
+      U.countUp(hs, S.hudShown, S.score, 500);
+      S.hudShown = S.score;
+      restart(hs, 'bump');
+    } else {
+      cancelAnimationFrame(hs._cu || 0);
+      hs.textContent = String(S.score);
+    }
     var c = $('combo');
     c.hidden = S.duel || S.combo < 2;
-    if (!c.hidden) { c.textContent = '🔥 ×' + S.combo; restart(c, 'combo'); }
+    if (!c.hidden && c._n !== S.combo) { c.innerHTML = ic('bolt') + 'Серия ×' + S.combo; restart(c, 'combo'); }
+    c._n = c.hidden ? 0 : S.combo;
   }
 
   function setControls(on) {
@@ -86,16 +101,20 @@
 
   // ---------- Раунд ----------
   var ASK = { long: 'сколько в длину?', tail: 'сколько в длину с хвостом?', tall: 'сколько в высоту?', diam: 'какой диаметр?', area: 'какая площадь?' };
+  // иконка в «аватарке» поста: откуда пришло заявление
+  var SRC_ICON = { social: 'chat', movie: 'film', photo: 'camera', map: 'map', rumor: 'rumor', cartoon: 'tv', think: 'bulb', money: 'cash' };
   function askText(r) {
     if (r.claim && r.claim.ask) return r.claim.ask;
     var ask = S.content.cfg.texts.ask || {};
     var key = r.kind === 'countries' ? 'area' : r.target.dim;
     return typeof ask[key] === 'string' && ask[key] ? ask[key] : ASK[key];
   }
-  function kickerText(r, i) {
-    if (r.boss) return '⚡ БОСС ×2 · ' + r.claim.source;
-    if (r.rematch) return '🔁 РЕВАНШ · ' + r.claim.source;
-    return r.claim.source + ' · ' + (i + 1) + '/' + S.rounds.length;
+  function postHead(r, i) {
+    $('post-ava').innerHTML = ic(SRC_ICON[r.claim.srcKey] || 'rumor');
+    $('post-src').textContent = r.claim.source;
+    var tag = $('post-tag');
+    tag.className = 'post-tag' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
+    tag.textContent = r.boss ? 'Босс ×2' : r.rematch ? 'Реванш' : (i + 1) + ' / ' + S.rounds.length;
   }
 
   function playRound(i) {
@@ -105,17 +124,18 @@
     S.phase = 'intro';
     setControls(false);
     $('sheet').hidden = true;
-    var k = $('kicker');
-    k.textContent = kickerText(r, i);
-    k.className = 'kicker' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
+    postHead(r, i);
     // громкое заявление, которое надо проверить
-    $('claim').textContent = r.claim.task ? r.claim.text : '«' + r.claim.text.replace(/\.$/, '') + '»';
+    var text = U.plain(r.claim.text);
+    $('claim').textContent = r.claim.task ? text : '«' + text.replace(/\.$/, '') + '»';
     restart($('claim'), 'in');
-    $('ask').innerHTML = r.claim.task ? '🔎 Растяни <b>' + esc(r.target.acc || r.target.name.toLowerCase()) + '</b> до нужной высоты'
-      : '🔎 Проверь: <b>' + esc(r.target.name) + '</b> — ' + esc(askText(r));
+    $('ask').innerHTML = ic('search') + '<span>' + (r.claim.task
+      ? 'Растяни <b>' + esc(r.target.acc || r.target.name.toLowerCase()) + '</b> до нужной высоты'
+      : 'Проверь: <b>' + esc(r.target.name) + '</b> — ' + esc(askText(r))) + '</span>';
     $('board').classList.toggle('boss', !!r.boss);
+    $('board').classList.remove('scanning');
     $('turn').hidden = true;
-    // белый силуэт стартует в размере, который обещает заявление
+    // лаймовый силуэт стартует в размере, который обещает заявление
     B.setRound(r, { start: r.claim.g0 });
     B.enable(false);
     updateHud();
@@ -127,16 +147,18 @@
   }
 
   function showIntro(r) {
+    var ov = $('intro');
     var tag = $('intro-tag');
-    tag.textContent = r.boss ? (r.claim.task ? '⚡ БОСС ×2 · сколько это в деньгах? ⚡' : '⚡ БОСС ×2 · фейк или правда? ⚡') : r.rematch ? '🔁 РЕВАНШ' : r.claim.task ? '💰 Сколько это в деньгах?' : '🕵️ Фейк или правда?';
+    tag.textContent = r.boss ? 'Босс-раунд · очки ×2' : r.rematch ? 'Реванш · новый эталон' : 'Раунд ' + (S.idx + 1) + ' из ' + S.rounds.length;
     tag.className = 'intro-tag' + (r.boss ? ' boss' : r.rematch ? ' rematch' : '');
+    ov.classList.toggle('boss', !!r.boss);
     $('intro-a').textContent = r.target.name;
     $('intro-b').innerHTML = '';
     $('intro-b').appendChild(document.createTextNode(r.ref.name));
     var sm = document.createElement('small');
     sm.textContent = 'эталон';
     $('intro-b').appendChild(sm);
-    var ov = $('intro');
+    $('intro-q').textContent = r.claim.task ? 'Сколько это в деньгах?' : 'Фейк или правда?';
     ov.hidden = false;
     // перезапуск анимаций
     Array.prototype.forEach.call(ov.children, function (c) { c.style.animation = 'none'; void c.offsetWidth; c.style.animation = ''; });
@@ -152,7 +174,7 @@
         res();
       }
       ov.addEventListener('pointerdown', finish);
-      setTimeout(finish, r.boss ? 1500 : 1100);
+      setTimeout(finish, r.boss ? 1500 : 1150);
     });
   }
 
@@ -165,7 +187,7 @@
       var t = $('turn');
       t.hidden = false;
       t.className = 'turn p' + S.turn;
-      t.textContent = S.turn === 1 ? 'Тянет Игрок 1 (белый)' : 'Тянет Игрок 2 (розовый)';
+      t.textContent = 'Тянет Игрок ' + S.turn;
     } else {
       B.setTurn(0, [true, false]);
     }
@@ -227,9 +249,10 @@
     S.turn = player;
     $('pass-title').textContent = 'Ход Игрока ' + player;
     $('pass-text').textContent = player === 1
-      ? 'Раунд ' + (S.idx + 1) + ' из ' + S.rounds.length + '. Игрок 2 — отвернись 🙈'
-      : 'Игрок 1 спрятал(а) ответ. Передай телефон — и не подглядывай 🙈';
-    $('btn-pass').textContent = 'Я Игрок ' + player + ', погнали!';
+      ? 'Раунд ' + (S.idx + 1) + ' из ' + S.rounds.length + '. Игрок 2 — отвернись и не подглядывай.'
+      : 'Ответ Игрока 1 спрятан. Передай телефон — и не подглядывай.';
+    $('btn-pass').textContent = 'Я Игрок ' + player + ', начинаю';
+    document.querySelector('.pass-card').className = 'pass-card p' + player;
     $('pass').hidden = false;
   }
   $('btn-pass').addEventListener('click', function () {
@@ -239,51 +262,59 @@
   });
 
   // ---------- Проверка ----------
+  // Луч сканера проходит по доске, затем проступает настоящий размер и падает штамп
   function reveal() {
     S.phase = 'reveal';
     setControls(false);
+    B.enable(false);
     $('turn').hidden = true;
     if (S.duel) B.setTurn(-1, [true, true]);
-    B.reveal();
-    var v = $('verdict');
-    var cl = S.rounds[S.idx].claim;
-    v.textContent = cl.task ? '💰 ' + U.fmtLen(S.rounds[S.idx].target.value) + '!' : cl.isTrue ? '✅ ПРАВДА' : '🕵️ ФЕЙК!';
-    v.className = 'verdict ' + (cl.isTrue || cl.task ? 'is-true' : 'is-fake');
-    restart(v, 'show');
-    App.sound.play('slam');
-    restart($('board'), 'shake');
+    var board = $('board');
+    var r = S.rounds[S.idx];
+    var cl = r.claim;
+    restart(board, 'scanning');
+    App.sound.play('scan');
     var ep = S.epoch;
-    U.wait(450).then(function () {
+    U.wait(U.reduced ? 0 : 380).then(function () {
+      if (ep !== S.epoch) return null;
+      B.reveal();
+      var v = $('verdict');
+      v.textContent = cl.task ? U.fmtLen(r.target.value) : cl.isTrue ? 'ПРАВДА' : 'ФЕЙК';
+      v.className = 'verdict ' + (cl.task ? 'is-calc' : cl.isTrue ? 'is-true' : 'is-fake');
+      restart(v, 'show');
+      App.sound.play('slam');
+      restart(board, 'shake');
+      var br = board.getBoundingClientRect();
+      App.fx.ring(br.left + br.width / 2, br.top + br.height * 0.42, cl.task ? C.teal : cl.isTrue ? C.green : C.red, Math.min(br.width, 300) * 0.55, 5);
+      return U.wait(450);
+    }).then(function () {
       if (ep !== S.epoch) return;
       if (S.duel) duelResult(); else soloResult();
     });
   }
 
+  function ratio(x) { return (x < 1 ? U.dec(x, 2) : U.fmtRatio(x)) + ' ×'; }
   function ratioLines(r, g) {
     var t = r.target, ref = r.ref;
     if (r.claim.task) {
       // в задаче про деньги считаем в сантиметрах, а не «во сколько раз»
-      return { truth: t.name + ' — ' + U.fmtLen(t.value), guess: U.fmtLen(B.value(t, g)), said: '', miss: '' };
+      return { truth: t.name + ' — ' + U.fmtLen(t.value), guess: U.fmtLen(B.value(t, g)), said: '' };
     }
     var k = t.value / ref.value;
     var gv = B.value(t, g) / ref.value;
+    // всегда «большее = N × меньшее» по настоящим размерам
     var flip = k < 1;
-    function eq(x) {
-      return flip ? ref.name + ' = ' + U.fmtRatio(1 / x) + ' × ' + t.name : t.name + ' = ' + U.fmtRatio(x) + ' × ' + ref.name;
-    }
-    var off = g > 1 ? g : 1 / g;
-    if (r.kind === 'countries') off = off * off;
-    var miss = points(g) === 100 ? 'В точку! 🎯'
-      : 'Промах: ' + (r.kind === 'countries' ? 'площадь' : 'размер') + ' в ' + U.fmtRatio(off) + ' раза ' + (g > 1 ? 'больше' : 'меньше');
-    return { truth: eq(k), guess: eq(gv), said: eq(r.claim.says), miss: miss };
+    function side(x) { return flip ? 1 / x : x; }
+    var eq = flip ? ref.name + ' = ' + U.fmtRatio(1 / k) + ' × ' + t.name : t.name + ' = ' + U.fmtRatio(k) + ' × ' + ref.name;
+    return { truth: eq, guess: ratio(side(gv)), said: ratio(side(r.claim.says)) };
   }
 
   // Вердикт детектора: фейк раскрыт, если ребёнок подогнал силуэт близко к правде
-  function verdictHtml(r, pts) {
-    if (r.claim.task) return '💰 <b>Цена в купюрах.</b> ' + (S.duel ? '' : pts >= 65 ? 'Прикинуто верно 👏' : 'Смотри расчёт 👇');
-    if (S.duel) return r.claim.isTrue ? '✅ <b>Это правда.</b>' : '🕵️ <b>Это фейк!</b>';
-    if (r.claim.isTrue) return '✅ <b>Это правда.</b> ' + (pts >= 65 ? 'Проверка пройдена 👏' : 'Не всё в сети — фейк 🙂');
-    return '🕵️ <b>Это фейк!</b> ' + (pts >= 65 ? 'Раскрыт 👏' : 'Он почти обманул — смотри правду 👇');
+  function verdictInfo(r, pts) {
+    var cl = r.claim;
+    if (cl.task) return { badge: 'Расчёт', cls: 'is-calc', sub: S.duel ? 'Сколько это в купюрах' : pts >= 65 ? 'Прикинуто верно' : 'Смотри расчёт ниже' };
+    if (cl.isTrue) return { badge: 'Правда', cls: 'is-true', sub: S.duel ? 'Заявление верное' : pts >= 65 ? 'Проверка пройдена' : 'Не всё в сети — фейк' };
+    return { badge: 'Фейк', cls: 'is-fake', sub: S.duel ? 'Заявление врёт' : pts >= 65 ? 'Фейк раскрыт' : 'Фейк почти прошёл — смотри правду' };
   }
 
   function soloResult() {
@@ -309,12 +340,16 @@
     }
 
     var lines = ratioLines(r, g);
+    var cells = [];
+    if (!r.claim.isTrue && !r.claim.task) cells.push({ cls: 'said', k: 'В заявлении', v: lines.said });
+    cells.push({ cls: 'mine', k: 'Твой ответ', v: lines.guess });
     openSheet({
-      score: '+' + gained + (r.boss ? ' ×2' : ''),
+      score: gained,
       band: band(pts),
-      rank: rankText(pts),
-      ratio: verdictHtml(r, pts) + '<br>На самом деле: <b>' + esc(lines.truth) + '</b>' +
-        (r.claim.isTrue || r.claim.task ? '' : '<br>Фейк говорил: ' + esc(lines.said)) + '<br>У тебя: ' + esc(lines.guess),
+      rank: rankText(pts) + (r.boss ? ' · очки ×2' : ''),
+      info: verdictInfo(r, pts),
+      truth: lines.truth,
+      cells: cells,
       round: r
     });
     celebrate(pts);
@@ -329,13 +364,19 @@
     var e1 = Math.abs(Math.log(g1)), e2 = Math.abs(Math.log(g2));
     var w = Math.abs(e1 - e2) < 1e-6 ? 0 : e1 < e2 ? 1 : 2;
     S.duelMarks[S.idx] = w;
-    var lines = ratioLines(r, 1);
+    var info = verdictInfo(r, 0);
+    info.sub = w === 0 ? 'Ничья в этом раунде' : 'Ближе к правде — Игрок ' + w;
+    var t = r.target;
     openSheet({
-      score: p1 + ' : ' + p2,
+      scoreHtml: p1 + ' : <span class="p2">' + p2 + '</span>',
       band: 3,
-      rank: w === 0 ? 'Ничья! 🤝' : 'Игрок ' + w + ' ближе! 🏆',
-      ratio: verdictHtml(r, 0) + '<br>На самом деле: <b>' + esc(lines.truth) + '</b><br>Игрок 1: ' +
-        esc(B.fmtVal(r.target, B.value(r.target, g1))) + ' · Игрок 2: ' + esc(B.fmtVal(r.target, B.value(r.target, g2))),
+      rank: '',
+      info: info,
+      truth: t.name + ' — ' + B.fmtVal(t, t.value),
+      cells: [
+        { cls: 'mine', k: 'Игрок 1', v: B.fmtVal(t, B.value(t, g1)) },
+        { cls: 'p2', k: 'Игрок 2', v: B.fmtVal(t, B.value(t, g2)) }
+      ],
       round: r
     });
     celebrate(Math.max(p1, p2));
@@ -345,18 +386,20 @@
     return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
   }
 
+  // Эффекты попадания: ударная волна и искры из настоящего размера, при промахе — оседающая пыль
   function celebrate(pts) {
     var p = B.truthPoint();
     if (pts >= 85) {
-      App.fx.confetti(pts === 100 ? 110 : 60);
-      App.fx.burst(p.x, p.y, ['⭐', '✨', '🔥', '💥'], pts === 100 ? 18 : 12);
+      App.fx.ring(p.x, p.y, C.lime, 130, 5);
+      App.fx.sparks(p.x, p.y, pts === 100 ? 26 : 18, null, pts === 100 ? 1.2 : 1);
+      if (pts === 100) App.fx.confetti(70);
       App.sound.play('win');
       App.bridge.vibrate();
     } else if (pts >= 65) {
-      App.fx.burst(p.x, p.y, ['⭐', '✨'], 8);
+      App.fx.sparks(p.x, p.y, 12, [C.lime, C.teal, C.text], 0.8);
       App.sound.play('star', 1);
     } else {
-      App.fx.burst(p.x, p.y, ['💨', '😵‍💫', '❓'], 6);
+      App.fx.dust(p.x, p.y, 12);
       App.sound.play('soft');
     }
     if (!S.duel && S.combo >= 2) setTimeout(function () { App.sound.play('combo', S.combo); }, 300);
@@ -364,26 +407,37 @@
 
   function openSheet(o) {
     S.phase = 'sheet';
-    var sc = $('res-score');
-    sc.textContent = o.score;
-    sc.className = 'res-score s' + o.band + (S.duel ? ' duel' : '');
-    $('res-rank').textContent = o.rank;
-    $('res-ratio').innerHTML = o.ratio;
     var cl = o.round.claim;
-    $('fact-title').textContent = cl.task ? '🧮 КАК ПОСЧИТАТЬ' : cl.isTrue ? '✅ ПОЧЕМУ ПРАВДА' : '🕵️ ПОЧЕМУ ФЕЙК';
+    var badge = $('res-badge');
+    badge.textContent = o.info.badge;
+    badge.className = 'res-badge ' + o.info.cls;
+    $('res-sub').textContent = o.info.sub;
+    var sc = $('res-score');
+    sc.className = 'res-score s' + o.band + (S.duel ? ' duel' : '');
+    sc.textContent = '';
+    $('res-rank').textContent = o.rank;
+    $('res-rows').innerHTML = '<div class="res-truth"><span>На самом деле</span><b>' + esc(o.truth) + '</b></div>' +
+      '<div class="res-pair">' + o.cells.map(function (c) {
+        return '<div class="res-cell ' + c.cls + '"><span>' + esc(c.k) + '</span><b>' + esc(c.v) + '</b></div>';
+      }).join('') + '</div>';
+    $('res-fact-box').className = 'res-box res-fact ' + o.info.cls;
+    $('fact-ic').innerHTML = ic(cl.task ? 'calc' : cl.isTrue ? 'shield' : 'search');
+    $('fact-title').textContent = cl.task ? 'Как посчитать' : cl.isTrue ? 'Почему правда' : 'Почему фейк';
     $('fact-name').textContent = cl.task ? o.round.ref.name : o.round.target.name;
-    $('res-fact').textContent = cl.why || (cl.isTrue ? 'Заявление совпадает с настоящими размерами.' :
-      'Заявление сильно ошибается — сравни с эталоном выше. Громкие слова ещё не факт!');
-    $('res-tip').textContent = o.round.target.fact ? '🤯 ' + o.round.target.fact : '';
-    $('btn-next').textContent = S.idx + 1 < S.rounds.length ? 'Дальше →' : 'Итоги 🏁';
+    $('res-fact').textContent = U.plain(cl.why) || (cl.isTrue ? 'Заявление совпадает с настоящими размерами.' :
+      'Заявление сильно ошибается — сравни с эталоном. Громкие слова ещё не факт.');
+    var fact = U.plain(o.round.target.fact);
+    $('res-tip-box').hidden = !fact;
+    $('res-tip').textContent = fact;
+    $('btn-next').querySelector('span').textContent = S.idx + 1 < S.rounds.length ? 'Дальше' : 'Итоги';
     // сначала даём рассмотреть доску с ответом
     var ep = S.epoch;
-    U.wait(650).then(function () {
+    U.wait(520).then(function () {
       if (ep !== S.epoch) return;
       $('sheet').hidden = false;
-      var inner = document.querySelector('.sheet-inner');
-      inner.scrollTop = 0;
-      restart(sc, 'res-score');
+      document.querySelector('.sheet-inner').scrollTop = 0;
+      if (S.duel) sc.innerHTML = o.scoreHtml;
+      else U.countUp(sc, 0, o.score, 650, function (v) { return '+' + v; });
       updateHud();
     });
   }
@@ -403,6 +457,15 @@
     S.content.cfg.titles.forEach(function (x) { if (norm >= x.min) t = x; });
     return t;
   }
+  function li(icon, label, val, cls, small) {
+    return '<li' + (cls ? ' class="' + cls + '"' : '') + '>' + ic(icon) + '<span class="lbl">' + label +
+      (small ? '<small>' + small + '</small>' : '') + '</span>' + (val !== undefined ? '<span class="val">' + val + '</span>' : '') + '</li>';
+  }
+  function pips(list) {
+    return list.map(function (cls, i) { return '<i class="' + cls + '" style="animation-delay:' + (0.25 + i * 0.05).toFixed(2) + 's"></i>'; }).join('');
+  }
+
+  var LESSON_ICON = { detector: 'search', animals: 'paw', countries: 'map', area: 'ruler', money: 'cash' };
 
   function endSolo() {
     S.phase = 'end';
@@ -411,16 +474,19 @@
     var isRecord = S.runs > 0 && S.score > S.record;
     S.record = Math.max(S.record, S.score);
     S.runs++;
+    var titles = S.content.cfg.titles;
     var title = titleFor(norm);
+    var level = titles.indexOf(title) + 1;
     var unlocks = S.content.cfg.unlocks;
     unlocks.forEach(function (u) { if (norm >= u.score && S.acc.indexOf(u.id) < 0) S.acc.push(u.id); });
 
-    $('end-score').innerHTML = S.score + '<small> / ' + max + '</small>';
-    $('end-title').textContent = title.emoji + ' ' + title.name;
+    U.countUp($('end-score'), 0, S.score, 900, function (v) { return v + '<small> / ' + max + '</small>'; });
+    $('end-title').textContent = title.name;
+    $('end-level').textContent = 'Звание ' + level + ' из ' + titles.length;
     App.capy.mount(capyEnd, 'happy');
     App.capy.wear(capyEnd, S.acc);
-    var grid = S.results.map(function (x) { return square(x.pts); }).join('');
-    $('end-grid').textContent = grid;
+    $('end-grid').innerHTML = pips(S.results.map(function (x) { return 's' + band(x.pts) + (x.round.boss ? ' boss' : ''); }));
+    var grid = S.results.map(function (x) { return shareSquare(x.pts); }).join('');
 
     var best = S.results.reduce(function (a, b) { return !a || b.pts > a.pts ? b : a; }, null);
     var fakes = S.results.filter(function (x) { return !x.isTrue && !x.task; });
@@ -428,57 +494,71 @@
     var tasks = S.results.filter(function (x) { return x.task; });
     var caught = fakes.filter(function (x) { return x.caught; }).length;
     var confirmed = truths.filter(function (x) { return x.caught; }).length;
+    var counted = tasks.filter(function (x) { return x.caught; }).length;
     function avg(list) { return list.length ? Math.round(list.reduce(function (a, b) { return a + b.pts; }, 0) / list.length) : 0; }
     var early = avg(S.results.slice(0, 3)), late = avg(S.results.slice(-3));
-    $('end-kicker').textContent = isRecord ? '🔥 Новый рекорд сессии!' : 'Итог проверки';
+    var grew = late >= early + 10;
+    var kicker = $('end-kicker');
+    kicker.textContent = isRecord ? 'Новый рекорд сессии' : 'Итог проверки';
+    kicker.className = 'end-kicker' + (isRecord ? ' record' : '');
     $('end-best').innerHTML = '<h3>' + (fakes.length || truths.length ? 'Детектор' : 'Финансы') + '</h3><ul>' +
-      (fakes.length ? '<li>🕵️ Раскрыто фейков: <b>' + caught + ' из ' + fakes.length + '</b></li>' : '') +
-      (truths.length ? '<li>✅ Правда подтверждена: <b>' + confirmed + ' из ' + truths.length + '</b></li>' : '') +
-      (tasks.length ? '<li>💰 Цен в купюрах прикинуто: <b>' + tasks.filter(function (x) { return x.caught; }).length + ' из ' + tasks.length + '</b></li>' : '') +
-      (S.results.length >= 6 ? '<li>📈 Точность прикидки: в начале ' + early + '%, в конце ' + late + '%' + (late >= early + 10 ? ' — прогресс! 🚀' : '') + '</li>' : '') +
-      (best ? '<li>🎯 ' + esc(best.task ? best.round.ref.name + ' → ' + best.round.target.name.toLowerCase() : best.round.target.name + ' vs ' + best.round.ref.name) + ' — ' + best.pts + ' ' + U.plural(best.pts, ['очко', 'очка', 'очков']) + '</li>' : '') +
-      (S.bestCombo >= 2 ? '<li>🔥 Лучшая серия: ' + S.bestCombo + ' раунда подряд</li>' : '') +
+      (fakes.length ? li('search', 'Фейков раскрыто', caught + ' из ' + fakes.length, caught === fakes.length ? 'good' : '') : '') +
+      (truths.length ? li('shield', 'Правда подтверждена', confirmed + ' из ' + truths.length, confirmed === truths.length ? 'good' : '') : '') +
+      (tasks.length ? li('cash', 'Цены в купюрах прикинуты', counted + ' из ' + tasks.length, counted === tasks.length ? 'good' : '') : '') +
+      (S.results.length >= 6 ? li('trend', 'Точность прикидки', early + '% → ' + late + '%', grew ? 'good' : '',
+        grew ? 'Есть прогресс: первые три раунда против последних' : 'Первые три раунда против последних') : '') +
+      (best ? li('target', esc(best.task ? best.round.ref.name + ' → ' + best.round.target.name.toLowerCase() : best.round.target.name + ' и ' + best.round.ref.name),
+        best.pts + ' ' + pointsWord(best.pts), '', 'Лучший раунд') : '') +
+      (S.bestCombo >= 2 ? li('bolt', 'Лучшая серия', S.bestCombo + ' подряд') : '') +
       '</ul>';
 
     $('end-unlocks').innerHTML = '<h3>Гардероб Капи</h3><ul>' + unlocks.map(function (u) {
       var open = S.acc.indexOf(u.id) >= 0;
-      var need = Math.round(u.score * max / 1000);
-      return '<li class="' + (open ? 'new' : 'locked') + '">' + (open ? '✅ ' : '🔒 ') + esc(u.label) +
-        (open ? '' : ' — нужно ' + need + ' ' + U.plural(need, ['очко', 'очка', 'очков'])) + '</li>';
+      var need = Math.max(1, Math.round(u.score * max / 1000));
+      var prog = Math.min(100, Math.round(S.score * 100 / need));
+      return '<li class="' + (open ? 'open' : 'locked') + '">' + ic(open ? 'check' : 'lock') + '<span class="lbl">' + esc(u.label) +
+        '<small>' + (open ? 'Открыто' : 'Нужно ' + need + ' ' + pointsWord(need) + ' за заход') + '</small>' +
+        (open ? '' : '<span class="bar"><i style="width:' + prog + '%"></i></span>') + '</span></li>';
     }).join('') + '</ul>';
 
     var kinds = {};
     S.rounds.forEach(function (r) { kinds[r.kind] = true; });
     var L = S.content.cfg.lessons;
     var lessons = [];
-    if (L.detector && (kinds.animals || kinds.countries)) lessons.push('🕵️ ' + L.detector);
-    if (kinds.animals && L.animals) lessons.push('🐾 ' + L.animals);
-    if (kinds.countries && L.countries) lessons.push('🗺️ ' + L.countries);
-    if (kinds.countries && L.area) lessons.push('📐 ' + L.area);
-    if (kinds.money && L.money) lessons.push('💰 ' + L.money);
-    $('end-lessons').innerHTML = '<h3>Что теперь знаешь</h3><ul>' + lessons.map(function (l) { return '<li>' + esc(l) + '</li>'; }).join('') + '</ul>';
+    if (L.detector && (kinds.animals || kinds.countries)) lessons.push('detector');
+    if (kinds.animals && L.animals) lessons.push('animals');
+    if (kinds.countries && L.countries) lessons.push('countries');
+    if (kinds.countries && L.area) lessons.push('area');
+    if (kinds.money && L.money) lessons.push('money');
+    $('end-lessons').hidden = !lessons.length;
+    $('end-lessons').innerHTML = '<h3>Что теперь знаешь</h3><ul>' + lessons.map(function (k) {
+      return '<li class="lesson">' + ic(LESSON_ICON[k]) + '<span class="lbl">' + esc(L[k]) + '</span></li>';
+    }).join('') + '</ul>';
 
     show('scr-end');
     $('scr-end').scrollTop = 0;
-    if (norm >= 500) App.fx.confetti(100);
+    if (norm >= 500) App.fx.confetti(70);
     App.sound.play('win');
     App.bridge.finish();
     App.bridge.completed();
-    S.last = { score: S.score, max: max, title: title, grid: grid, caught: caught, fakes: fakes.length };
+    S.last = {
+      score: S.score, max: max, title: title, grid: grid, caught: caught, fakes: fakes.length, counted: counted, tasks: tasks.length,
+      marks: S.results.map(function (x) { return { color: BAND_COLOR[band(x.pts)], boss: !!x.round.boss }; })
+    };
   }
 
   function endDuel() {
     S.phase = 'end';
     var a = S.duelScore[0], b = S.duelScore[1];
-    $('duel-score').innerHTML = '<span class="p1">' + a + '</span> : <span class="p2">' + b + '</span>';
-    $('duel-title').textContent = a > b ? '🏆 Победил Игрок 1!' : b > a ? '🏆 Победил Игрок 2!' : '🤝 Ничья — оба легенды!';
+    $('duel-score').innerHTML = '<span class="p1">' + a + '</span> <span class="sep">:</span> <span class="p2">' + b + '</span>';
+    $('duel-title').textContent = a > b ? 'Победил Игрок 1' : b > a ? 'Победил Игрок 2' : 'Ничья — оба молодцы';
     var cd = $('capy-duel');
     App.capy.mount(cd, 'happy');
     App.capy.wear(cd, S.acc);
-    // кто был ближе в каждом раунде: 🤍 — Игрок 1, 🩷 — Игрок 2, ⚪ — ничья
-    $('duel-grid').textContent = S.duelMarks.map(function (w) { return ['⚪', '🤍', '🩷'][w]; }).join('');
+    // кто был ближе в каждом раунде: лайм — Игрок 1, фиолетовый — Игрок 2, серый — ничья
+    $('duel-grid').innerHTML = pips(S.duelMarks.map(function (w) { return 'w' + w; }));
     show('scr-duel-end');
-    App.fx.confetti(100);
+    App.fx.confetti(70);
     App.sound.play('win');
     App.bridge.finish();
   }
@@ -507,7 +587,7 @@
       var im = $('share-img');
       im.hidden = !img;
       if (img) im.src = img;
-      $('share-note').textContent = 'Открываем «Поделиться» 📲 Если меню не появилось, зажми картинку — её можно сохранить и отправить другу.';
+      $('share-note').textContent = 'Открываем «Поделиться». Если меню не появилось, зажми картинку — её можно сохранить и отправить другу.';
       $('share-view').hidden = false;
       App.sound.play('win');
     });
@@ -520,19 +600,22 @@
   $('btn-share').addEventListener('click', function () {
     var r = S.last;
     if (!r) return;
-    doShare('Детектор фейков «Прикинь!» в СберKids: раскрыто ' + r.caught + ' из ' + r.fakes + ' фейков, ' + r.score + ' из ' + r.max + ' очков — «' + r.title.name + '» ' + r.grid +
-      '\n' + S.content.cfg.texts.share, {
-      kicker: 'Детектор фейков: мой результат', big: r.score + ' / ' + r.max, title: r.title.emoji + ' ' + r.title.name + ' · 🕵️ ' + r.caught + '/' + r.fakes,
-      grid: r.grid, capy: { acc: S.acc, mood: 'happy' }, footer: S.content.cfg.texts.share
+    var share = S.content.cfg.texts.share;
+    var stat = r.fakes ? 'Фейков раскрыто: ' + r.caught + ' из ' + r.fakes : 'Цены в купюрах: ' + r.counted + ' из ' + r.tasks;
+    doShare('Детектор фейков «Прикинь!» в СберKids: ' + (r.fakes ? 'раскрыто ' + r.caught + ' из ' + r.fakes + ' фейков, ' : '') +
+      r.score + ' из ' + r.max + ' очков — «' + r.title.name + '» ' + r.grid + (share ? '\n' + share : ''), {
+      kicker: 'Детектор фейков', big: String(r.score), small: ' / ' + r.max, title: r.title.name, sub: stat,
+      marks: r.marks, capy: { acc: S.acc, mood: 'happy' }, footer: share
     });
   });
 
   $('btn-duel-share').addEventListener('click', function () {
     var a = S.duelScore[0], b = S.duelScore[1];
-    var grid = $('duel-grid').textContent;
-    doShare('Дуэль в «Прикинь!»: ' + a + ' : ' + b + ' ' + grid + '\nКто прикинет точнее? ⚔️', {
-      kicker: 'Дуэль на одном телефоне', big: a + ' : ' + b, title: $('duel-title').textContent,
-      grid: grid, capy: { acc: S.acc, mood: 'happy' }, footer: 'Кто прикинет точнее? ⚔️'
+    var grid = S.duelMarks.map(function (w) { return ['⬜', '🟩', '🟪'][w]; }).join('');
+    var winColor = [C.mute, C.lime, C.violet];
+    doShare('Дуэль в «Прикинь!»: ' + a + ' : ' + b + ' ' + grid + '\nКто прикинет точнее?', {
+      kicker: 'Дуэль на одном телефоне', big: a + ' : ' + b, small: '', title: $('duel-title').textContent, sub: 'Кто ближе к правде в каждом раунде',
+      marks: S.duelMarks.map(function (w) { return { color: winColor[w], boss: false }; }), capy: { acc: S.acc, mood: 'happy' }, footer: 'Кто прикинет точнее?'
     });
   });
 
@@ -546,6 +629,7 @@
     S.rounds = App.content.makeRun(S.content, S.mode, cfg.rounds, cfg.boss);
     S.results = [];
     S.score = 0;
+    S.hudShown = 0;
     S.combo = 0;
     S.bestCombo = 0;
     show('scr-game');
@@ -571,7 +655,7 @@
     ['intro', 'pass', 'sheet', 'share-view'].forEach(function (id) { $(id).hidden = true; });
     var rec = $('record');
     rec.hidden = !S.record;
-    rec.textContent = 'Рекорд этой сессии: ' + S.record;
+    rec.innerHTML = ic('trophy') + 'Рекорд сессии: ' + S.record;
     App.capy.wear($('capy-start'), capyAcc());
     show('scr-start');
   }
@@ -585,7 +669,7 @@
   $('btn-rematch').addEventListener('click', startDuel);
   $('btn-menu').addEventListener('click', toMenu);
   $('btn-duel-menu').addEventListener('click', toMenu);
-  // ✕ в левом верхнем углу — всегда. В приложении CLOSE_EVENT закрывает экран игры;
+  // Крестик в левом верхнем углу — всегда. В приложении CLOSE_EVENT закрывает экран игры;
   // если игра открыта не в приложении и экран остался, возвращаемся в меню.
   $('btn-close').addEventListener('click', function () {
     App.sound.play('tap');
@@ -600,7 +684,7 @@
   function syncSound() {
     var on = App.sound.isOn();
     Array.prototype.forEach.call(document.querySelectorAll('.js-sound'), function (b) {
-      b.textContent = b.classList.contains('icon-btn') ? (on ? '🔊' : '🔇') : (on ? '🔊 Звук и вибрация' : '🔇 Тихий режим');
+      b.innerHTML = ic(on ? 'sound' : 'mute') + (b.classList.contains('icon-btn') ? '' : '<span>' + (on ? 'Звук и вибрация' : 'Тихий режим') + '</span>');
       b.setAttribute('aria-label', on ? 'Выключить звук и вибрацию' : 'Включить звук и вибрацию');
     });
   }
@@ -609,16 +693,18 @@
   });
 
   // Капи на старте отвечает на тап; реплики берутся из game.json → texts.capy
-  var LINES = ['Йо! Я Капи. Сколько капибар в ките? 🤔'];
+  var LINES = ['Я Капи. Проверяю громкие заявления.'];
   var lineIdx = 0;
-  $('capy-start').addEventListener('click', function (e) {
+  $('capy-start').addEventListener('click', function () {
     lineIdx = (lineIdx + 1) % LINES.length;
     var b = $('hero-bubble');
     b.textContent = LINES[lineIdx];
     b.style.animation = 'none'; void b.offsetWidth; b.style.animation = '';
-    App.capy.mood($('capy-start'), 'happy');
-    App.fx.burst(e.clientX, e.clientY, ['🍊', '✨', '💥'], 10, 26);
-    App.sound.play('boom');
+    var capy = $('capy-start');
+    App.capy.mood(capy, 'happy');
+    var cr = capy.getBoundingClientRect();
+    App.fx.sparks(cr.left + cr.width / 2, cr.top + cr.height * 0.3, 12, [C.lime, C.amber, C.text], 0.8);
+    App.sound.play('star', 0);
     App.bridge.vibrate();
   });
 
@@ -634,7 +720,7 @@
       $('btn-duel').disabled = !(a || k || mo);
       $('load-error').hidden = a || k || mo;
       applyLook(c);
-      if (c.draft) toast('✏️ Черновик менеджера: игра с правками, которые ещё не выложены');
+      if (c.draft) toast('Черновик менеджера: игра с правками, которые ещё не выложены');
     });
   }
 
@@ -655,13 +741,13 @@
         if (/^#[0-9a-f]{3,8}$/i.test(ev.theme[k] || '')) theme[k] = ev.theme[k];
       });
     }
+    // цвет темы — подсветка доски сверху, сама доска всегда тёмная
     document.documentElement.style.setProperty('--board-a', theme.animals);
     document.documentElement.style.setProperty('--board-c', theme.countries);
     document.documentElement.style.setProperty('--board-m', theme.money);
     $('tagline').innerHTML = App.content.rich(cfg.texts.tagline);
-    var lines = Array.isArray(cfg.texts.capy) ? cfg.texts.capy.filter(function (x) { return typeof x === 'string' && x; }) : [];
-    if (lines.length) {
-      LINES = lines;
+    if (cfg.texts.capy.length) {
+      LINES = cfg.texts.capy;
       lineIdx = 0;
       $('hero-bubble').textContent = LINES[0];
     }
@@ -676,6 +762,7 @@
     document.querySelector('[data-mode="animals"]').hidden = !m.animals;
     document.querySelector('[data-mode="countries"]').hidden = !m.countries;
     document.querySelector('[data-mode="money"]').hidden = !m.money;
+    document.querySelector('.modes').hidden = !(m.animals || m.countries || m.money);
     $('btn-duel').hidden = !m.duel;
     $('btn-to-duel').hidden = !m.duel;
     App.capy.wear($('capy-start'), capyAcc());
@@ -683,10 +770,6 @@
   $('btn-reload').addEventListener('click', loadContent);
 
   function init() {
-    var logo = document.querySelector('.logo');
-    logo.innerHTML = 'ПРИКИНЬ!'.split('').map(function (ch, i) {
-      return '<span style="animation-delay:' + (i * 0.09) + 's">' + ch + '</span>';
-    }).join('');
     App.capy.mount($('capy-start'), 'idle');
     App.capy.wear($('capy-start'), ['orange']);
     B.init($('board'), onBoardChange);

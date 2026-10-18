@@ -1,5 +1,12 @@
 # Источники
 
+Шрифты (`game/fonts`, обрезаны до кириллицы и латиницы, лицензия SIL Open Font License 1.1 — тексты лицензий лежат рядом):
+
+- Unbounded — The Unbounded Project Authors (https://github.com/googlefonts/unbounded)
+- Onest — The Onest Project Authors (https://github.com/simpals/onest)
+
+Иконки интерфейса и персонаж Капи нарисованы для игры.
+
 Контуры стран: Natural Earth 1:50m (public domain).
 
 Силуэты животных: PhyloPic (https://www.phylopic.org), только CC0 и Public Domain:
